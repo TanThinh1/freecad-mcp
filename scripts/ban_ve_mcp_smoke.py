@@ -66,6 +66,17 @@ async def main():
                 print(f"kiem_tra_spec(LOI {loai}): {dt:.2f}s hop_le={d.get('hop_le')} loi={d.get('loi')}")
                 d, _, err, dt = await call("ve_ban_ve", {"loai": loai, "spec": sp_})
                 print(f"ve_ban_ve(LOI {loai}): {dt:.2f}s hop_le={d.get('hop_le')} job_id={d.get('job_id')} loi={len(d.get('loi', []))} thông báo")
+            # 4.4: deliberate error case - dai_nha 31750 is not a multiple of buoc_cot 6000: must report the 1750 mm remainder, suggest 30000 / 36000 and NOT start a job
+            sp44 = {"nhip": 16500, "dai_nha": 31750, "buoc_cot": 6000}
+            d, _, err, dt = await call("kiem_tra_spec", {"loai": "luoi_cot", "spec": sp44})
+            msg = " ".join(d.get("loi", []))
+            print(f"4.4 kiem_tra_spec: {dt:.2f}s hop_le={d.get('hop_le')} du1750={'1750' in msg} goi_y30000={'30000' in msg} goi_y36000={'36000' in msg}")
+            d, _, err, dt = await call("ve_ban_ve", {"loai": "luoi_cot", "spec": sp44})
+            print(f"4.4 ve_ban_ve: {dt:.2f}s hop_le={d.get('hop_le')} job_id={d.get('job_id')} (khong dung)")
+            d, _, err, dt = await call("kiem_tra_spec", {"loai": "thang", "spec": {"cao_tang": 3000, "so_bac": 17}})
+            print(f"thieu so bat buoc: hop_le={d.get('hop_le')} thieu={d.get('thieu_bat_buoc')}")
+            d, _, err, dt = await call("kiem_tra_spec", {"loai": ["x"], "spec": 5})
+            print(f"sai kieu: isError={err} {d.get('loi') or d.get('raw', '')[:80]}")
             d, _, err, dt = await call("kiem_tra_spec", {"loai": "mai_nha", "spec": {}})
             print(f"kiem_tra_spec(loai sai): {dt:.2f}s {d.get('loi')}")
             for loai, ex in cases:
