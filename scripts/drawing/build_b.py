@@ -16,6 +16,7 @@ from spec_b import SpecError
 from tcvn import ARIAL_CAP, FRAME_X0, FRAME_X1, FRAME_Y0, FRAME_Y1, LAYER_AXIS, LAYER_BUBBLE, LAYER_COLUMN, LAYER_DIM, LAYER_TEXT, TB_H, TB_W
 
 VIEW_TITLE = "MẶT BẰNG LƯỚI TRỤC VÀ CỘT"
+DEFAULT_SHEET_NO = "KC-01"       # drawing number used when khung_ten.ky_hieu_ban_ve is empty
 NEEDED_LAYERS = (LAYER_AXIS, LAYER_BUBBLE, LAYER_COLUMN, LAYER_DIM, LAYER_TEXT, "KHUNG-TEN", "NET-MANH")
 
 
@@ -134,7 +135,10 @@ def build(sp: dict, profile: dict) -> Drawing:
 
     # ---- frame + title block (sheet=True: DXF only; PDF takes them from the template)
     meta = dict(sp["khung_ten"])
-    meta.setdefault("ten_ban_ve", VIEW_TITLE)
+    if not meta.get("ten_ban_ve"):
+        meta["ten_ban_ve"] = VIEW_TITLE
+    if not meta.get("ky_hieu_ban_ve"):
+        meta["ky_hieu_ban_ve"] = DEFAULT_SHEET_NO
     D.fields = TBK.fields_from_meta(meta, f"1:{s}")
     D.prims.extend(TBK.primitives(D.fields))
 

@@ -26,6 +26,7 @@ from tcvn import ARIAL_CAP, est_width, LAYER_AXIS, LAYER_BUBBLE, LAYER_COLUMN, L
 LAYER_MAIN, LAYER_RAFTER, LAYER_LEVEL = "NET-CHINH", "KEO", "NET-TAM"
 NEEDED_LAYERS = (LAYER_MAIN, LAYER_RAFTER, LAYER_LEVEL, LAYER_COLUMN, LAYER_AXIS, LAYER_BUBBLE, LAYER_DIM, LAYER_TEXT, LAYER_FRAME, LAYER_THIN)
 VIEW_TITLE = "MẶT CẮT NGANG KHUNG"
+DEFAULT_SHEET_NO = "KC-02"       # drawing number used when khung_ten.ky_hieu_ban_ve is empty
 SYMBOL_BAR, SYMBOL_TRI = 19.0, 3.0          # level symbol (paper mm), same as type A
 
 
@@ -252,6 +253,8 @@ def build(sp: dict, profile: dict) -> Drawing:
     for d in dims:
         D.add_dim(_moved_dim(d, tx, ty), P)
     kt = dict(sp["khung_ten"])
+    if not kt.get("ky_hieu_ban_ve"):
+        kt["ky_hieu_ban_ve"] = DEFAULT_SHEET_NO
     if not kt.get("ten_ban_ve"):
         kt["ten_ban_ve"] = VIEW_TITLE
     D.fields = TBK.fields_from_meta(kt, f"1:{s}")

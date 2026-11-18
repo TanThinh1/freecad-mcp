@@ -28,6 +28,7 @@ LAYER_MAIN, LAYER_STRINGER, LAYER_LEVEL, LAYER_HIDDEN = "NET-CHINH", "KEO", "NET
 NEEDED_LAYERS = (LAYER_MAIN, LAYER_STRINGER, LAYER_LEVEL, LAYER_HIDDEN, LAYER_THIN, LAYER_DIM, LAYER_TEXT, LAYER_FRAME)
 VIEW_TITLE_PLAN, VIEW_TITLE_SECTION = "MẶT BẰNG THANG", "MẶT CẮT 1-1"
 DEFAULT_TITLE = "MẶT BẰNG VÀ MẶT CẮT CẦU THANG"
+DEFAULT_SHEET_NO = "KC-03"       # drawing number used when khung_ten.ky_hieu_ban_ve is empty
 EXT = 4.0              # level lines run this far (paper mm) past the floor stubs
 SYMBOL_BAR, SYMBOL_TRI = 19.0, 3.0       # level symbol: bar length and triangle height (paper mm)
 
@@ -315,6 +316,8 @@ def build(sp: dict, profile: dict) -> Drawing:
     for d in res["plan"]["dims"]:
         D.add_dim(_moved_dim(d, px, py), P)
     kt = dict(sp["khung_ten"])
+    if not kt.get("ky_hieu_ban_ve"):
+        kt["ky_hieu_ban_ve"] = DEFAULT_SHEET_NO
     if not kt.get("ten_ban_ve"):
         kt["ten_ban_ve"] = DEFAULT_TITLE
     scale_text = f"1:{s}" if s == s_pl else f"1:{s} / 1:{s_pl}"
