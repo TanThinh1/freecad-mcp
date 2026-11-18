@@ -108,6 +108,14 @@ def parse_scale(ty_le, errors):
     return ty_le, int(m.group(1))
 
 
+def parse_kho(kho, errors):
+    """kho_giay: "auto" (A3 first, A2/A1 only when needed) or one of A3, A2, A1."""
+    if kho not in ("auto", "A3", "A2", "A1"):
+        errors.append(f"kho_giay = {kho!r} không hợp lệ. Dùng \"auto\" (ưu tiên A3, lên A2 rồi A1 khi cần), \"A3\", \"A2\" hoặc \"A1\".")
+        return "auto"
+    return kho
+
+
 def parse_ten(ten, errors):
     if not isinstance(ten, str) or not _NAME.fullmatch(ten):
         errors.append(f"ten = {ten!r}: chỉ dùng chữ cái, số, '_' và '-' (tối đa 64 ký tự); đây là tên thư mục và tệp đầu ra.")
@@ -200,13 +208,14 @@ def validate(spec) -> dict:
     if not isinstance(gom, bool):
         errors.append(f"gom_nhan_tiet_dien = {gom!r} phải là true hoặc false (true: một nhãn tiết diện + chú thích \"TẤT CẢ CỘT\"; false: nhãn ở mọi cột).")
         gom = True
+    kho = parse_kho(spec.get("kho_giay", "auto"), errors)
     ty_le, scale = parse_scale(spec.get("ty_le", "auto"), errors)
     ten = parse_ten(spec.get("ten"), errors)
     kt = parse_khung_ten(spec.get("khung_ten") or {}, errors)
     params = parse_params(spec.get("tham_so") or {}, DEFAULT_PARAMS, errors)
     if errors:
         raise SpecError(errors)
-    return dict(loai="B", ten=ten, gom_nhan_tiet_dien=gom, nhip=nhip, dai_nha=dai, buoc_cot=buoc, so_truc_doc=N, section=sec, ty_le=ty_le, scale=scale, khung_ten=kt, params=params)
+    return dict(loai="B", ten=ten, gom_nhan_tiet_dien=gom, kho_giay=kho, nhip=nhip, dai_nha=dai, buoc_cot=buoc, so_truc_doc=N, section=sec, ty_le=ty_le, scale=scale, khung_ten=kt, params=params)
 
 
 def load_spec(path: str) -> dict:

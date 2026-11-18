@@ -1,7 +1,7 @@
 """Mutation tests for drawing type C (cross-section of a steel portal frame): corrupt primitives / DXF / PDF expectations on purpose and
 require verify.py + verify_c.py to FAIL the matching check; plus positive controls (the unmutated data passes every check that runs).
 
-    python scripts\\drawing\\test_verify_mutations_c.py     (needs out\\c1_12000x6000, c2_16500x7000, c3_24000x8000_1mai, c5_11000x6000_le from make_drawing)
+    python scripts\\drawing\\test_verify_mutations_c.py     (needs out\\c1_12000x6000, c2_16500x7000_kep, c3_24000x8000_1mai, c5_11000x6000_le from make_drawing)
 
 Mutations (required): wrong top height (ridge +1 mm), wrong slope, wrong axis position, wrong level text, missing column, joint node displaced,
 hidden inner edge drawn at a joint, missing joint_step (c2), wrong dimension value / label, wrong rounding label (c5), each also as a 0.5 mm near
@@ -32,7 +32,7 @@ from tcvn import read_profile  # noqa: E402
 
 OUT = os.environ.get("TEST_OUT", os.path.join(os.getcwd(), "out"))
 EX = os.path.join(HERE, "examples")
-NAMES = {"c1": "c1_12000x6000", "c2": "c2_16500x7000", "c3": "c3_24000x8000_1mai", "c5": "c5_11000x6000_le"}
+NAMES = {"c1": "c1_12000x6000", "c2": "c2_16500x7000_kep", "c3": "c3_24000x8000_1mai", "c5": "c5_11000x6000_le"}
 
 
 def load(name, profile, **over):
@@ -506,6 +506,36 @@ def main():
         pdf_case("pdf_dimension_line_expected_0.3mm_paper_longer", dim_len, {"5.1", "5.6"})
     else:
         expect("pdf_cases_skipped", False, f"không có {pdf1} (chạy make_drawing không có --no-pdf trước)")
+
+    # ---- A1 sheet (4.3): frame 811x574, title block 180x65 at the bottom-right of the frame; policy picks A1 only when A3/A2 do not hold the drawing
+    pdf8 = os.path.join(OUT, "c8_a1_60000x12000", "c8_a1_60000x12000.pdf")
+    if os.path.isfile(pdf8):
+        sp8, D8 = load("c8_a1_60000x12000", profile)
+        expect("control_a1_primitives", D8.sheet == "A1" and D8.scale == 100 and not prim_check(D8, sp8), f"khổ {D8.sheet} 1:{D8.scale}; không đạt: {sorted(prim_check(D8, sp8))}")
+        f8, dx8, _ = dxf_of(D8, "ctl_c8", D8, sp8)
+        expect("control_a1_dxf", not f8, f"không đạt: {sorted(f8)}")
+        C = verify.Checks()
+        verify.check_pdf(C, D8, sp8, dx8, pdf8, "png-not-checked", profile)
+        expect("control_a1_pdf_passes_frame_811x574", not (failed(C) - {"4.6"}), f"không đạt: {sorted(failed(C))}")
+        Dm = copy.deepcopy(D8)
+        Dm.sheet = "A2"
+        C = verify.Checks()
+        verify.check_pdf(C, Dm, sp8, dx8, pdf8, None, profile)
+        expect("pdf_a1_drawing_checked_as_A2", {"4.1", "4.2"} <= failed(C), f"không đạt: {sorted(failed(C))}")
+        # the sheet policy: the same drawing labelled A3 (as if the builder had not moved up to A1) must fail 1.16 / 1.17
+        Dm = copy.deepcopy(D8)
+        Dm.sheet = "A3"
+        C = verify.Checks()
+        verify_c.check_primitives_c(C, Dm, sp8)
+        expect("policy_a1_drawing_labelled_A3", {"1.16", "1.17"} <= failed(C), f"không đạt: {sorted(failed(C))}")
+        # a drawing that fits A3 but is labelled A2 violates "A3 first"
+        Dm = copy.deepcopy(D1)
+        Dm.sheet = "A2"
+        C = verify.Checks()
+        verify_c.check_primitives_c(C, Dm, sp1)
+        expect("policy_a3_drawing_labelled_A2", "1.16" in failed(C), f"không đạt: {sorted(failed(C))}")
+    else:
+        expect("a1_cases_skipped", False, f"không có {pdf8} (chạy make_drawing cho c8 trước)")
 
     ok_all = True
     for name, ok, detail in results:

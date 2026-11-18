@@ -17,7 +17,7 @@ import math
 from decimal import Decimal
 from fractions import Fraction
 
-from spec_b import DEFAULT_PARAMS, SpecError, _mm, parse_khung_ten, parse_params, parse_scale, parse_section, parse_ten, SECTION_ERR
+from spec_b import DEFAULT_PARAMS, SpecError, _mm, parse_khung_ten, parse_kho, parse_params, parse_scale, parse_section, parse_ten, SECTION_ERR
 
 DEFAULT_PARAMS_C = dict(DEFAULT_PARAMS)
 DEFAULT_PARAMS_C.update(
@@ -81,6 +81,7 @@ def validate(spec) -> dict:
     if not isinstance(ve_truc, bool):
         errors.append(f"ve_truc_cau_kien = {ve_truc!r} phải là true hoặc false.")
         ve_truc = False
+    kho = parse_kho(spec.get("kho_giay", "auto"), errors)
     ty_le, scale = parse_scale(spec.get("ty_le", "auto"), errors)
     ten = parse_ten(spec.get("ten"), errors)
     kt = parse_khung_ten(spec.get("khung_ten") or {}, errors)
@@ -103,6 +104,6 @@ def validate(spec) -> dict:
                         f"khoảng nhô {round_half_up(rise)} mm); giá trị chính xác = {fmt_exact(y_top)} mm (khoảng nhô {fmt_exact(rise)} mm). Hình vẽ dùng giá trị chính xác.")
     theta_deg = math.degrees(math.atan(i_in / 100.0))
     half = nhip / 2 if n_mai == 2 else nhip
-    return dict(loai="C", ten=ten, nhip=nhip, cao_cot=cao_cot, do_doc_mai=float(i_in), so_mai=n_mai, col=col, raf=raf, ve_truc=ve_truc, ty_le=ty_le, scale=scale,
+    return dict(loai="C", ten=ten, nhip=nhip, cao_cot=cao_cot, do_doc_mai=float(i_in), so_mai=n_mai, col=col, raf=raf, ve_truc=ve_truc, kho_giay=kho, ty_le=ty_le, scale=scale,
                 khung_ten=kt, params=params, i=float(i_in) / 100.0, theta_deg=theta_deg, rise=float(rise), rise_exact=rise, y_top=float(y_top), y_top_exact=y_top,
                 run=half, raf_len=math.hypot(half, float(rise)), warnings=warnings)

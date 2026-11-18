@@ -117,7 +117,8 @@ class Drawing:
     dims: list = field(default_factory=list)
     fields: dict = field(default_factory=dict)    # title-block editable texts (field name -> text)
     info: dict = field(default_factory=dict)
-    kind: str = "B"                    # drawing type: "A" stair, "B" grid + columns
+    kind: str = "B"                    # drawing type: "A" stair, "B" grid + columns, "C" frame cross-section
+    sheet: str = "A3"                  # sheet size name (tcvn.SHEETS): A3 (default), A2, A1
     meta: dict = field(default_factory=dict)   # type-specific data used by verification
 
     def add(self, *ps):

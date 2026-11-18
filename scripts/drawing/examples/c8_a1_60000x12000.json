@@ -1,0 +1,19 @@
+{
+  "loai": "C",
+  "ten": "c8_a1_60000x12000",
+  "nhip": 60000,
+  "cao_cot": 12000,
+  "do_doc_mai": 10,
+  "so_mai": 2,
+  "tiet_dien_cot": "H400x200x8x13",
+  "tiet_dien_keo": "H450x200x8x12",
+  "ty_le": "auto",
+  "khung_ten": {
+    "don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP",
+    "cong_trinh": "NHÀ XƯỞNG KHUNG THÉP",
+    "chu_dau_tu": "CÔNG TY CP CƠ KHÍ CHẾ TẠO",
+    "ten_ban_ve": "MẶT CẮT NGANG KHUNG",
+    "loai_ho_so": "BVTC",
+    "ngay": "18/11/2026"
+  }
+}

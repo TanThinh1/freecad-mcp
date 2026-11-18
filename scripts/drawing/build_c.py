@@ -18,15 +18,16 @@ import math
 import titleblock as TBK
 from build_a import _moved, _moved_dim
 from primitives import Circle, Dim, Drawing, Line, Text, cap_to_em, drawing_extent, expand_dim, fmt_dec, fmt_value
-from scale import SCALES, place_rects
+from scale import SCALES, place_rects, sheet_scale_candidates
 from spec_b import SpecError
 from spec_c import level_text, percent_text, round_half_up
-from tcvn import ARIAL_CAP, est_width, LAYER_AXIS, LAYER_BUBBLE, LAYER_COLUMN, LAYER_DIM, LAYER_FRAME, LAYER_TEXT, LAYER_THIN
+from tcvn import ARIAL_CAP, SHEETS, est_width, LAYER_AXIS, LAYER_BUBBLE, LAYER_COLUMN, LAYER_DIM, LAYER_FRAME, LAYER_TEXT, LAYER_THIN
 
 LAYER_MAIN, LAYER_RAFTER, LAYER_LEVEL = "NET-CHINH", "KEO", "NET-TAM"
 NEEDED_LAYERS = (LAYER_MAIN, LAYER_RAFTER, LAYER_LEVEL, LAYER_COLUMN, LAYER_AXIS, LAYER_BUBBLE, LAYER_DIM, LAYER_TEXT, LAYER_FRAME, LAYER_THIN)
 VIEW_TITLE = "MẶT CẮT NGANG KHUNG"
 LEVEL_NOTE = "CAO ĐỘ TÍNH THEO GIAO ĐIỂM TRỤC"       # printed above the top level: levels are those of the axis intersections
+SHEET_SCALE_LIMIT = 100          # A2 / A1 are used only when A3 does not hold the drawing at 1:100 or finer
 DEFAULT_SHEET_NO = "KC-02"       # drawing number used when khung_ten.ky_hieu_ban_ve is empty
 SYMBOL_BAR, SYMBOL_TRI = 19.0, 3.0          # level symbol (paper mm), same as type A
 
@@ -232,26 +233,36 @@ def build(sp: dict, profile: dict) -> Drawing:
     P = sp["params"]
     gap = P["khe_vung_ve"]
     tried, chosen = [], None
-    for s in ([sp["scale"]] if sp["scale"] else sorted(SCALES)):
-        bad = labels_overlap(sp, s)
+    only_sheet = None if sp["kho_giay"] == "auto" else sp["kho_giay"]
+    cache: dict = {}
+    for sh, sc in sheet_scale_candidates(sp["scale"], only_sheet, limit=SHEET_SCALE_LIMIT):
+        bad = labels_overlap(sp, sc)
         if bad:
-            tried.append(f"1:{s} bị loại: {bad}")
+            if sh == "A3":
+                tried.append(f"1:{sc} bị loại: {bad}")
             continue
-        prims, dims, meta = layout(sp, s)
-        bb = _extent(prims, dims, P)
-        t = place_rects([bb], gap)
+        if sc not in cache:
+            prims, dims, meta = layout(sp, sc)
+            cache[sc] = (prims, dims, meta, _extent(prims, dims, P))
+        prims, dims, meta, bb = cache[sc]
+        t = place_rects([bb], gap, SHEETS[sh])
         w, h = bb[2] - bb[0] + 2 * gap, bb[3] - bb[1] + 2 * gap
         if t is None:
-            tried.append(f"1:{s} cần {w:.0f}×{h:.0f} mm")
+            if sc == (sp["scale"] or SHEET_SCALE_LIMIT) or (not sp["scale"] and sc == 500):
+                tried.append(f"{sh} ở 1:{sc} cần {w:.0f}×{h:.0f} mm (khung {SHEETS[sh].frame_w:g}×{SHEETS[sh].frame_h:g} trừ góc khung tên 180×65)")
             continue
-        chosen = (s, prims, dims, meta, bb, t, w, h)
+        chosen = (sh, sc, prims, dims, meta, bb, t, w, h)
         break
     if chosen is None:
-        raise SpecError(["Không vừa vùng vẽ A3 (khung 390×277 trừ góc khung tên 180×65): " + "; ".join(tried) + ". Không tự xoay hình."])
-    s, prims, dims, meta, bb, (tx, ty), w, h = chosen
-    reason = (f"1:{s} " + ("do người dùng chọn" if sp["scale"] else f"là tỷ lệ lớn nhất trong dãy {'/'.join(map(str, SCALES))} mà hình") +
-              f" cần {w:.0f}×{h:.0f} mm gồm kích thước, ký hiệu trục, tên hình, nằm trong vùng vẽ (khung 390×277 trừ góc khung tên 180×65)" + (f"; không vừa: {'; '.join(tried)}" if tried else ""))
-    D = Drawing(name=sp["ten"], scale=s, origin=(tx, ty), kind="C")      # axis A at ground on the sheet = (tx, ty)
+        raise SpecError(["Không vừa vùng vẽ của khổ giấy nào đã thử: " + "; ".join(tried) + ". Không tự xoay hình."])
+    sheet_name, s, prims, dims, meta, bb, (tx, ty), w, h = chosen
+    sheet = SHEETS[sheet_name]
+    reason = (f"khổ {sheet_name}, tỷ lệ 1:{s} " + ("do người dùng chọn" if sp["scale"] else "là tỷ lệ lớn nhất còn vừa") +
+              f"; hình cần {w:.0f}×{h:.0f} mm gồm kích thước, ký hiệu trục, tên hình, nằm trong vùng vẽ (khung {sheet.frame_w:g}×{sheet.frame_h:g} trừ góc khung tên 180×65)." +
+              ("" if sp["scale"] else f" Quy tắc: ưu tiên A3, chỉ dùng A2 rồi A1 khi khổ nhỏ hơn không vừa ở tỷ lệ ≤ 1:{SHEET_SCALE_LIMIT}") +
+              (f"; không khổ nào vừa ở tỷ lệ ≤ 1:{SHEET_SCALE_LIMIT} nên dùng 1:{s}" if (s > SHEET_SCALE_LIMIT and not sp["scale"]) else "") +
+              (f"; không vừa: {'; '.join(tried)}" if tried else ""))
+    D = Drawing(name=sp["ten"], scale=s, origin=(tx, ty), kind="C", sheet=sheet_name)      # axis A at ground on the sheet = (tx, ty)
     D.prims.extend(_moved(p, tx, ty) for p in prims)
     for d in dims:
         D.add_dim(_moved_dim(d, tx, ty), P)
@@ -261,10 +272,10 @@ def build(sp: dict, profile: dict) -> Drawing:
     if not kt.get("ten_ban_ve"):
         kt["ten_ban_ve"] = VIEW_TITLE
     D.fields = TBK.fields_from_meta(kt, f"1:{s}")
-    D.prims.extend(TBK.primitives(D.fields))
+    D.prims.extend(TBK.primitives(D.fields, sheet))
     meta.update(origin=(tx, ty))
     D.meta = meta
-    D.info = dict(scale=s, reason=reason, band="L", N=2, n_columns=2, warnings=sp["warnings"], params=P, extents_paper=(w, h), extent_sheet=(bb[0] + tx, bb[1] + ty, bb[2] + tx, bb[3] + ty),
+    D.info = dict(scale=s, sheet=sheet_name, reason=reason, band="L", N=2, n_columns=2, warnings=sp["warnings"], params=P, extents_paper=(w, h), extent_sheet=(bb[0] + tx, bb[1] + ty, bb[2] + tx, bb[3] + ty),
                   y_top=sp["y_top"], rise=sp["rise"], theta_deg=sp["theta_deg"], rafter_length=sp["raf_len"], so_mai=sp["so_mai"],
                   convention=("2 mái: đỉnh tại giữa nhịp, cao đỉnh = cao_cot + nhip/2 × do_doc_mai/100" if sp["so_mai"] == 2 else
                               "1 mái: kèo dốc từ trục A (thấp, cao_cot) lên trục B (cao), cao đỉnh = cao_cot + nhip × do_doc_mai/100"))

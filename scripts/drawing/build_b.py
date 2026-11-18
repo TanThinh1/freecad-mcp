@@ -11,11 +11,12 @@ import string
 
 import titleblock as TBK
 from primitives import Circle, Dim, Drawing, Line, Rect, Text, cap_to_em
-from scale import BAND_LEFT, BAND_TOP, FRAME_H, FRAME_W, layout_scale, paper_size
+from scale import fit_in_sheet, paper_size, sheet_scale_candidates
 from spec_b import SpecError
-from tcvn import ARIAL_CAP, FRAME_X0, FRAME_X1, FRAME_Y0, FRAME_Y1, LAYER_AXIS, LAYER_BUBBLE, LAYER_COLUMN, LAYER_DIM, LAYER_TEXT, TB_H, TB_W
+from tcvn import ARIAL_CAP, SHEETS, LAYER_AXIS, LAYER_BUBBLE, LAYER_COLUMN, LAYER_DIM, LAYER_TEXT
 
 VIEW_TITLE = "MẶT BẰNG LƯỚI TRỤC VÀ CỘT"
+SHEET_SCALE_LIMIT = 200          # A2 / A1 are used only when A3 does not hold the drawing at 1:200 or finer
 DEFAULT_SHEET_NO = "KC-01"       # drawing number used when khung_ten.ky_hieu_ban_ve is empty
 NEEDED_LAYERS = (LAYER_AXIS, LAYER_BUBBLE, LAYER_COLUMN, LAYER_DIM, LAYER_TEXT, "KHUNG-TEN", "NET-MANH")
 
@@ -59,23 +60,32 @@ def build(sp: dict, profile: dict) -> Drawing:
     mg = margins_paper(P, lw_lab, extra_bottom=(2.0 + P["cao_chu_ghi_chu"]) if gom else 0.0)
     gap = P["khe_vung_ve"]
 
-    # ---- scale
+    # ---- sheet + scale: A3 first, A2 then A1 only when A3 does not hold the drawing at a scale up to 1:200 (then all scales on A3, A2, A1)
+    tried: list[str] = []
+    chosen = None
+    only_sheet = None if sp["kho_giay"] == "auto" else sp["kho_giay"]
+    for sh, sc in sheet_scale_candidates(sp["scale"], only_sheet, limit=SHEET_SCALE_LIMIT):
+        pw, ph = paper_size(bbox, sc, mg, gap)
+        fit = fit_in_sheet(pw, ph, SHEETS[sh])
+        if fit:
+            chosen = (sh, sc, pw, ph) + fit
+            break
+        if sc == (sp["scale"] or SHEET_SCALE_LIMIT) or (not sp["scale"] and sc == 500):
+            tried.append(f"{sh} ở 1:{sc} cần {pw:.0f}×{ph:.0f} mm (vùng vẽ {SHEETS[sh].frame_w:g}×{SHEETS[sh].frame_h:g} trừ góc khung tên 180×65)")
+    if chosen is None:
+        raise SpecError(["Không vừa vùng vẽ của khổ giấy nào đã thử: " + "; ".join(tried) + ". Không tự xoay hình."])
+    sheet_name, s, pw, ph, band, region = chosen
+    sheet = SHEETS[sheet_name]
+    band_txt = f"dải trên {sheet.frame_w:g}×{sheet.frame_h - sheet.tb_h:g}" if band == "top" else f"dải trái {sheet.frame_w - sheet.tb_w:g}×{sheet.frame_h:g}"
     if sp["scale"]:
-        s = sp["scale"]
-        pw, ph = paper_size(bbox, s, mg, gap)
-        if pw <= FRAME_W and ph <= FRAME_H - TB_H:
-            band, region = "top", BAND_TOP
-        elif pw <= FRAME_W - TB_W and ph <= FRAME_H:
-            band, region = "left", BAND_LEFT
-        else:
-            raise SpecError([f"ty_le = 1:{s} không vừa vùng vẽ: hình + kích thước cần {pw:.0f}×{ph:.0f} mm, vùng vẽ là khung 390×277 trừ góc khung tên 180×65."])
-        reason = f"tỷ lệ do người dùng chọn 1:{s}; cần {pw:.0f}×{ph:.0f} mm, vừa " + ("dải trên 390×212" if band == "top" else "dải trái 210×277") + " mm"
+        reason = f"khổ {sheet_name}, tỷ lệ do người dùng chọn 1:{s}; cần {pw:.0f}×{ph:.0f} mm, vừa {band_txt} mm"
     else:
-        try:
-            r = layout_scale(bbox, mg, gap)
-        except ValueError as e:
-            raise SpecError([str(e)])
-        s, band, region, pw, ph, reason = r["scale"], r["band"], r["region"], r["paper_w"], r["paper_h"], r["reason"]
+        reason = (f"khổ {sheet_name}, tỷ lệ 1:{s}: hình + chuỗi kích thước cần {pw:.0f}×{ph:.0f} mm, vừa {band_txt} mm (khung {sheet.frame_w:g}×{sheet.frame_h:g} trừ góc khung tên 180×65). "
+                  f"Quy tắc: ưu tiên A3, chỉ dùng A2 rồi A1 khi khổ nhỏ hơn không vừa ở tỷ lệ ≤ 1:{SHEET_SCALE_LIMIT}")
+        if s > SHEET_SCALE_LIMIT:
+            reason += f"; không khổ nào vừa ở tỷ lệ ≤ 1:{SHEET_SCALE_LIMIT} nên dùng 1:{s}"
+        if tried:
+            reason += "; không vừa: " + "; ".join(tried)
 
     # ---- placement: centre the annotated extents in the band
     ew, eh = bbox[0] / s + mg[0] + mg[1], bbox[1] / s + mg[2] + mg[3]
@@ -86,7 +96,7 @@ def build(sp: dict, profile: dict) -> Drawing:
     oy = ey0 + mg[2] + (h / 2) / s
     sx = lambda x: ox + x / s
     sy = lambda y: oy + y / s
-    D = Drawing(name=sp["ten"], scale=s, origin=(ox, oy))
+    D = Drawing(name=sp["ten"], scale=s, origin=(ox, oy), sheet=sheet_name)
 
     ov, gp, dia = P["truc_vuon_qua"], P["khe_vong_truc"], P["duong_kinh_vong_truc"]
     rb, hb = dia / 2, P["cao_chu_vong_truc"]
@@ -149,13 +159,13 @@ def build(sp: dict, profile: dict) -> Drawing:
     if not meta.get("ky_hieu_ban_ve"):
         meta["ky_hieu_ban_ve"] = DEFAULT_SHEET_NO
     D.fields = TBK.fields_from_meta(meta, f"1:{s}")
-    D.prims.extend(TBK.primitives(D.fields))
+    D.prims.extend(TBK.primitives(D.fields, sheet))
 
-    D.info = dict(scale=s, reason=reason, band=band, N=N, n_columns=N * 2, n_axes=N + 2, section=sec["text"], column_b=b, column_h=h,
+    D.info = dict(scale=s, sheet=sheet_name, reason=reason, band=band, N=N, n_columns=N * 2, n_axes=N + 2, section=sec["text"], column_b=b, column_h=h,
                   bbox_real=bbox, margins=mg, extents_paper=(ew, eh), origin=(ox, oy), nhip=nhip, dai_nha=dai, buoc_cot=buoc, params=P,
                   geometry=dict(y_bot=y_bot, y_top=y_top, x_left=x_left, x_right=x_right, xs=xs, ys=ys, title_base=t_base, note_base=n_base))
     # sanity: annotated content must stay inside the drawing frame
     low = n_base - 0.5
-    if low < FRAME_Y0 or ex0 < FRAME_X0 - 1e-6 or ex0 + ew > FRAME_X1 + 1e-6:
+    if low < sheet.y0 or ex0 < sheet.x0 - 1e-6 or ex0 + ew > sheet.x1 + 1e-6:
         raise SpecError([f"nội bộ: nội dung vượt khung (đáy {low:.1f} mm, x {ex0:.1f}..{ex0 + ew:.1f})."])
     return D

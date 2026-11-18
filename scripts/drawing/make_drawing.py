@@ -32,7 +32,7 @@ import spec_c  # noqa: E402
 from dxf_render import render_dxf  # noqa: E402
 from pdf_render import symbol_svg  # noqa: E402
 from spec_b import SpecError, load_spec  # noqa: E402
-from tcvn import ProfileError, read_profile  # noqa: E402
+from tcvn import SHEETS, ProfileError, read_profile  # noqa: E402
 
 FREECAD = os.environ.get("FREECAD_EXE") or os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "FreeCAD 1.1", "bin", "freecad.exe")
 FREECADCMD = os.environ.get("FREECADCMD_EXE") or os.path.join(os.path.dirname(FREECAD), "FreeCADCmd.exe")
@@ -73,10 +73,11 @@ def _rm(*paths):
 
 
 def render_pdf(D, profile, outdir: str, work: str, name: str, timeout: int = 300) -> dict:
-    job = dict(template=os.path.join(work, f"{name}_template.svg"), symbol=os.path.join(work, f"{name}_symbol.svg"), texts=D.fields,
+    sheet = SHEETS[D.sheet]
+    job = dict(template=os.path.join(work, f"{name}_template.svg"), symbol=os.path.join(work, f"{name}_symbol.svg"), texts=D.fields, sheet=D.sheet, sheet_w=sheet.w, sheet_h=sheet.h,
                pdf=os.path.join(outdir, f"{name}.pdf"), svg=os.path.join(work, f"{name}_techdraw.svg"), log=os.path.join(work, f"{name}_freecad.log"))
     _rm(job["pdf"], job["svg"], job["log"])           # never accept a stale result from a previous run
-    TBK.write_template(job["template"])
+    TBK.write_template(job["template"], sheet)
     open(job["symbol"], "w", encoding="utf-8").write(symbol_svg(D, profile))
     jp = os.path.join(work, f"{name}_job.json")
     json.dump(job, open(jp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
@@ -136,7 +137,7 @@ def make(spec_path: str, out_root: str, profile_path: str | None, do_pdf=True, d
     outdir = os.path.join(out_root, name)
     work = os.path.join(outdir, "_work")
     os.makedirs(work, exist_ok=True)
-    res.update(name=name, scale=D.scale, scale_plan=D.info.get("scale_plan", D.scale), layout=D.info.get("layout"), reason=D.info["reason"], band=D.info["band"],
+    res.update(name=name, sheet=D.sheet, scale=D.scale, scale_plan=D.info.get("scale_plan", D.scale), layout=D.info.get("layout"), reason=D.info["reason"], band=D.info["band"],
                N=D.info["N"], columns=D.info["n_columns"])
     files = dict(dxf=os.path.join(outdir, f"{name}.dxf"), dwg=os.path.join(outdir, f"{name}.dwg"), pdf=os.path.join(outdir, f"{name}.pdf"), png=os.path.join(outdir, f"{name}.png"))
     _rm(files["dxf"], files["dwg"], files["png"])

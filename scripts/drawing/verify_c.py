@@ -12,7 +12,7 @@ from fractions import Fraction
 
 from primitives import Circle, Line, Rect, Text, drawing_extent, prim_bbox
 from readers import f, unesc
-from tcvn import FRAME_X0, FRAME_X1, FRAME_Y0, FRAME_Y1, TB_X0, TB_Y1, read_profile
+from tcvn import SHEETS, read_profile
 from verify import Checks, check_expressions, close
 from verify_a import _hits_text
 
@@ -317,11 +317,12 @@ def _by(D, *tags):
     return [p for p in D.prims if p.tag in tags]
 
 
-def _fits(w, h, g=5.0):
-    """Can a w x h paper rectangle be placed in the frame inner area (clearance g) clear of the 180x65 title block (L-shaped region)."""
-    iw, ih = (FRAME_X1 - FRAME_X0) - 2 * g, (FRAME_Y1 - FRAME_Y0) - 2 * g
-    top_h = (FRAME_Y1 - g) - (TB_Y1 + g)
-    left_w = (TB_X0 - g) - (FRAME_X0 + g)
+def _fits(w, h, g=5.0, sheet="A3"):
+    """Can a w x h paper rectangle be placed in the frame inner area of `sheet` (clearance g) clear of the 180x65 title block (L-shaped region)."""
+    sh = SHEETS[sheet]
+    iw, ih = sh.frame_w - 2 * g, sh.frame_h - 2 * g
+    top_h = (sh.y1 - g) - (sh.tb_y1 + g)
+    left_w = (sh.tb_x0 - g) - (sh.x0 + g)
     return (w <= iw and h <= top_h) or (w <= left_w and h <= ih)
 
 
@@ -702,32 +703,36 @@ def check_layout_c(C: Checks, D, sp, X):
     w, h = ext[2] - ext[0], ext[3] - ext[1]
     # the whole drawing (annotated) must lie inside the frame (clear 5 mm) and clear of the title block
     g = 5.0
-    inside = ext[0] >= FRAME_X0 + g - 1e-6 and ext[2] <= FRAME_X1 - g + 1e-6 and ext[1] >= FRAME_Y0 + g - 1e-6 and ext[3] <= FRAME_Y1 - g + 1e-6
-    tb_clear = max(TB_X0 - ext[2], ext[1] - TB_Y1) >= g - 1e-6
+    sh = SHEETS[D.sheet]
+    inside = ext[0] >= sh.x0 + g - 1e-6 and ext[2] <= sh.x1 - g + 1e-6 and ext[1] >= sh.y0 + g - 1e-6 and ext[3] <= sh.y1 - g + 1e-6
+    tb_clear = max(sh.tb_x0 - ext[2], ext[1] - sh.tb_y1) >= g - 1e-6
     # real extent of the structure (outline + ground-free) scales with 1/s, annotations are constant paper mm: model W(s') = (W - Wr/s) + Wr/s'
     polys = member_polys(X)
     pts = [p for _, pl in polys for p in pl if abs(p[1]) < 1e-6 or p[1] <= X["top"] + 3 * (X["hc"] + X["hr"])]
     xs = [-X["hc"] / 2, X["n"] + X["hc"] / 2]
     ys = [0.0, max(max(a[1], b[1]) for a, b in union_boundary(polys))]
     wr, hr_ = xs[1] - xs[0], ys[1] - ys[0]
-    fits = {}
-    for sc in SCALES_C:
-        pw, ph = (w - wr / s) + wr / sc, (h - hr_ / s) + hr_ / sc
-        fits[sc] = (pw, ph, _fits(pw, ph, g))
-    fit_scales = [sc for sc in SCALES_C if fits[sc][2]]
-    best = min(fit_scales) if fit_scales else None
-    if sp.get("scale"):
-        sc_ok = D.scale == sp["scale"]
-        why = f"tỷ lệ chỉ định 1:{sp['scale']}"
+    # candidate order of the sheet policy (written here from the requirement): A3, A2, A1 in turn; within a sheet the largest scale first;
+    # scales up to 1:100 on every sheet before any coarser scale. An explicit ty_le / kho_giay restricts the list.
+    sheets = [sp["kho_giay"]] if sp.get("kho_giay", "auto") != "auto" else ["A3", "A2", "A1"]
+    scs = [sp["scale"]] if sp.get("scale") else list(SCALES_C)
+    order = [(sh_, sc) for sh_ in sheets for sc in scs if sc <= 100 or sp.get("scale")] + ([] if sp.get("scale") else [(sh_, sc) for sh_ in sheets for sc in scs if sc > 100])
+    est = {sc: ((w - wr / s) + wr / sc, (h - hr_ / s) + hr_ / sc) for sc in SCALES_C}
+    fits = {sc: (est[sc][0], est[sc][1]) for sc in SCALES_C}
+    if (D.sheet, D.scale) in order:
+        k = order.index((D.sheet, D.scale))
+        earlier = order[:k]
+        # the chosen pair must fit (measured); every earlier pair must NOT fit, with a 2 mm margin on the modelled size (suy luận)
+        sc_ok = _fits(w, h, g, D.sheet) and all(not _fits(est[sc][0] - 2.0, est[sc][1] - 2.0, g, sh_) for sh_, sc in earlier if sc != D.scale or sh_ != D.sheet)
+        why = ("tỷ lệ/khổ chỉ định" if (sp.get("scale") or sp.get("kho_giay", "auto") != "auto") else "mô hình (suy luận): các cặp khổ/tỷ lệ đứng trước đều không vừa")
     else:
-        # the chosen scale must fit (measured) and every larger one must NOT fit with a margin of 2 mm (model estimate, suy luận) - so it is the largest
-        larger = [sc for sc in SCALES_C if sc < D.scale]
-        sc_ok = D.scale in SCALES_C and _fits(w, h, g) and all(not _fits(fits[sc][0] - 2.0, fits[sc][1] - 2.0, g) for sc in larger)
-        why = f"mô hình (suy luận): vừa ở {fit_scales}; lớn nhất {best}"
-    C.add(1, "1.16", "tỷ lệ = lớn nhất trong 20/25/50/100/200/500 mà hình đầy đủ ghi chú vừa vùng vẽ (khung trừ góc khung tên 180×65); đo: vừa ở tỷ lệ đã chọn, suy luận: không vừa ở tỷ lệ lớn hơn", sc_ok,
-          f"tỷ lệ 1:{D.scale}, hình {w:.1f}×{h:.1f} mm giấy (đo); {why}; cần ở các tỷ lệ lớn hơn: " + ", ".join(f"1:{sc} {fits[sc][0]:.0f}×{fits[sc][1]:.0f}" for sc in SCALES_C if sc < D.scale))
+        sc_ok, why = False, f"cặp ({D.sheet}, 1:{D.scale}) không nằm trong danh sách ứng viên {order[:6]}…"
+    if sp.get("scale"):
+        sc_ok = sc_ok and D.scale == sp["scale"]
+    C.add(1, "1.16", "khổ giấy + tỷ lệ theo quy tắc: ưu tiên A3, lên A2 rồi A1 chỉ khi khổ nhỏ hơn không vừa ở tỷ lệ ≤ 1:100; tỷ lệ lớn nhất trong 20/25/50/100/200/500 còn vừa vùng vẽ (khung trừ góc khung tên 180×65); đo: vừa ở cặp đã chọn, suy luận: các cặp đứng trước không vừa", sc_ok,
+          f"khổ {D.sheet}, tỷ lệ 1:{D.scale}, hình {w:.1f}×{h:.1f} mm giấy (đo); {why}")
     C.add(1, "1.17", "bố cục: toàn bộ nét/chữ nằm trong khung (cách mép ≥ 5 mm) và cách khung tên 180×65 ≥ 5 mm, không xoay tờ giấy (chữ chỉ nằm ngang, đứng hoặc song song kèo)", inside and tb_clear and all(min(abs(abs(getattr(p, "rot", 0.0)) - v) for v in (0.0, 90.0, X["theta_deg"])) < 1e-6 for p in D.prims),
-          f"bbox {tuple(round(v, 1) for v in ext)}; trong khung {inside}; cách khung tên {max(TB_X0 - ext[2], ext[1] - TB_Y1):.1f} mm")
+          f"bbox {tuple(round(v, 1) for v in ext)}; trong khung {inside}; cách khung tên {max(sh.tb_x0 - ext[2], ext[1] - sh.tb_y1):.1f} mm")
 
 
 # ------------------------------------------------------------------ 2. DXF (independent of primitives, real mm)

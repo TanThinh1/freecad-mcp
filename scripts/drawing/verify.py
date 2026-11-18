@@ -19,7 +19,7 @@ import titleblock as TBK
 from dxf_render import expected_counts
 from primitives import Circle, Line, Rect, Text, cap_to_em, fmt_value
 from readers import analyze_pdf, f, read_dxf
-from tcvn import FRAME_X0, FRAME_X1, FRAME_Y0, FRAME_Y1, LAYER_AXIS, LAYER_COLUMN, LAYER_DIM, LTYPES, TB_W, TB_X0, TB_Y0, layer_style
+from tcvn import LAYER_AXIS, LAYER_COLUMN, LAYER_DIM, LTYPES, SHEETS, layer_style
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FREECADCMD = os.environ.get("FREECADCMD_EXE") or os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "FreeCAD 1.1", "bin", "FreeCADCmd.exe")
@@ -323,7 +323,7 @@ def _straight(p):
 
 
 def expected_pdf_shapes(D, profile):
-    top = lambda y: 297.0 - y
+    top = lambda y: SHEETS[D.sheet].h - y
     out = []
     for p in D.prims:
         if isinstance(p, Text):
@@ -354,7 +354,7 @@ def pdf_text_match(D, paths):
     """Each text must have glyph outline(s) at the expected place: the union of the glyphs inside the expected (rotated) text box must be centred on the
     expected centre (tolerance 0.8 mm, or 5 % of the string width for centred text / 15 % for left- or right-aligned text, whose width is only estimated);
     digit-only strings of >= 3 digits (horizontal or vertical) must also have the expected ink width. Slanted text: position only (suy luận: rotation is not decoded)."""
-    top = lambda y: 297.0 - y
+    top = lambda y: SHEETS[D.sheet].h - y
     glyphs = [p for p in paths if p["kind"] == "fill" and p["n"] > 30 and (p["bb"][2] - p["bb"][0]) < 120 and (p["bb"][3] - p["bb"][1]) < 25]
     ok, bad, wr = 0, [], []
     n_digit = 0
@@ -393,11 +393,14 @@ def check_pdf(C: Checks, D, sp, dx: dict, pdf: str, png: str | None, profile: di
     paths = a["paths"]
     s = D.scale
     W, H = a["page_mm"]
-    top = lambda y: 297.0 - y
-    C.add(4, "4.1", "khổ trang 420 × 297 mm", close(W, 420, 0.3) and close(H, 297, 0.3), f"{W:.2f} × {H:.2f} mm")
+    sh = SHEETS[D.sheet]
+    FRAME_X0, FRAME_X1, FRAME_Y0, FRAME_Y1 = sh.x0, sh.x1, sh.y0, sh.y1
+    TB_X0, TB_W, TB_Y0, TB_TOP = sh.tb_x0, sh.tb_w, sh.tb_y0, sh.tb_y1
+    top = lambda y: sh.h - y
+    C.add(4, "4.1", f"khổ trang {sh.name}: {sh.w:g} × {sh.h:g} mm", close(W, sh.w, 0.3) and close(H, sh.h, 0.3), f"{W:.2f} × {H:.2f} mm (khổ {sh.name})")
     fr = [p for p in paths if p["kind"] == "stroke" and close(p["bb"][0], FRAME_X0, 0.08) and close(p["bb"][1], top(FRAME_Y1), 0.08)
           and close(p["bb"][2], FRAME_X1, 0.08) and close(p["bb"][3], top(FRAME_Y0), 0.08)]
-    C.add(4, "4.2", "khung bản vẽ 390 × 277 tại lề trái 20 / các lề khác 10, nét 0,7 mm", len(fr) == 1 and close(fr[0]["lw"], 0.7, 0.03),
+    C.add(4, "4.2", f"khung bản vẽ {sh.frame_w:g} × {sh.frame_h:g} tại lề trái 20 / các lề khác 10, nét 0,7 mm", len(fr) == 1 and close(fr[0]["lw"], 0.7, 0.03),
           f"bbox {tuple(round(x, 2) for x in fr[0]['bb'])} lw={fr[0]['lw']:.2f}" if fr else "không tìm thấy")
     tb = [p for p in paths if p["kind"] == "stroke" and close(p["bb"][0], TB_X0, 0.08) and close(p["bb"][1], top(TB_TOP), 0.08)
           and close(p["bb"][2], TB_X0 + TB_W, 0.08) and close(p["bb"][3], top(TB_Y0), 0.08)]

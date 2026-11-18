@@ -14,6 +14,7 @@ from xml.sax.saxutils import escape
 from primitives import Line, Rect, Text
 from spec_b import SpecError
 from tcvn import est_width  # noqa: F401  (re-exported: verify.py uses TBK.est_width)
+from tcvn import A3, SHEETS  # noqa: F401
 from tcvn import (ARIAL_CAP, FRAME_X0, FRAME_X1, FRAME_Y0, FRAME_Y1, LAYER_FRAME, LAYER_TEXT, LAYER_THIN, SHEET_H, SHEET_W, TB_H, TB_W, TB_X0, TB_Y0, W_FRAME,
                   W_THIN)
 
@@ -105,34 +106,37 @@ def fields_from_meta(meta: dict, scale_text: str) -> dict:
 
 
 # ---------------------------------------------------------------- geometry helpers (sheet coordinates, y up)
-def rel_to_sheet(rx: float, ry: float):
-    return TB_X0 + rx, TB_TOP - ry
+def rel_to_sheet(rx: float, ry: float, sheet=A3):
+    return sheet.tb_x0 + rx, sheet.tb_y1 - ry
 
 
-def field_anchor(name: str):
+def field_anchor(name: str, sheet=A3):
     cell, dx, dy, size, bold, _ = FIELDS[name]
     rx0, ry0 = (CELLS[cell][0], CELLS[cell][1]) if cell else (0, 0)
-    return rel_to_sheet(rx0 + dx, ry0 + dy)
+    return rel_to_sheet(rx0 + dx, ry0 + dy, sheet)
 
 
-def primitives(fields: dict) -> list:
-    """Frame, title block outline, dividers, captions and values as primitives (all sheet=True)."""
-    out = [Rect(layer=LAYER_FRAME, tag="frame", sheet=True, p0=(FRAME_X0, FRAME_Y0), p1=(FRAME_X1, FRAME_Y1)),
-           Rect(layer=LAYER_FRAME, tag="tb_outline", sheet=True, p0=(TB_X0, TB_Y0), p1=(TB_X0 + TB_W, TB_TOP))]
+def primitives(fields: dict, sheet=A3) -> list:
+    """Frame, title block outline, dividers, captions and values as primitives (all sheet=True) for the given sheet (default A3)."""
+    out = [Rect(layer=LAYER_FRAME, tag="frame", sheet=True, p0=(sheet.x0, sheet.y0), p1=(sheet.x1, sheet.y1)),
+           Rect(layer=LAYER_FRAME, tag="tb_outline", sheet=True, p0=(sheet.tb_x0, sheet.tb_y0), p1=(sheet.tb_x0 + sheet.tb_w, sheet.tb_y1))]
     for x1, y1, x2, y2 in DIVIDERS:
-        out.append(Line(layer=LAYER_THIN, tag="tb_divider", sheet=True, p1=rel_to_sheet(x1, y1), p2=rel_to_sheet(x2, y2)))
+        out.append(Line(layer=LAYER_THIN, tag="tb_divider", sheet=True, p1=rel_to_sheet(x1, y1, sheet), p2=rel_to_sheet(x2, y2, sheet)))
     for cell, dx, dy, txt in CAPTIONS:
         cx, cy, _, _ = CELLS[cell]
-        out.append(Text(layer=LAYER_TEXT, tag="tb_caption", sheet=True, s=txt, pos=rel_to_sheet(cx + dx, cy + dy), h=CAP_SIZE * ARIAL_CAP))
+        out.append(Text(layer=LAYER_TEXT, tag="tb_caption", sheet=True, s=txt, pos=rel_to_sheet(cx + dx, cy + dy, sheet), h=CAP_SIZE * ARIAL_CAP))
     for name, text in fields.items():
         size, bold = FIELDS[name][3], FIELDS[name][4]       # `size` is the em size used in the SVG template
-        out.append(Text(layer=LAYER_TEXT, tag="tb_text", sheet=True, s=text, pos=field_anchor(name), h=size * ARIAL_CAP, halign="center", bold=bold))
+        out.append(Text(layer=LAYER_TEXT, tag="tb_text", sheet=True, s=text, pos=field_anchor(name, sheet), h=size * ARIAL_CAP, halign="center", bold=bold))
     return out
 
 
-def template_svg() -> str:
-    """A3 landscape SVG template for TechDraw (mm units, y down) with freecad:editable text cells."""
-    H = SHEET_H
+def template_svg(sheet=A3) -> str:
+    """Landscape SVG template of the sheet for TechDraw (mm units, y down) with freecad:editable text cells."""
+    H = sheet.h
+    SHEET_W, SHEET_H = sheet.w, sheet.h
+    FRAME_X0, FRAME_Y0, FRAME_X1, FRAME_Y1 = sheet.x0, sheet.y0, sheet.x1, sheet.y1
+    TB_X0, TB_TOP, TB_W, TB_H = sheet.tb_x0, sheet.tb_y1, sheet.tb_w, sheet.tb_h
     fy = lambda y: H - y
     parts = ['<?xml version="1.0" encoding="UTF-8"?>',
              '<svg xmlns="http://www.w3.org/2000/svg" xmlns:freecad="https://www.freecad.org/wiki/index.php?title=Svg_Namespace" '
@@ -142,15 +146,15 @@ def template_svg() -> str:
              "</g>", '<g id="title_block" style="fill:none;stroke:#000000;stroke-linecap:butt;stroke-linejoin:miter">',
              f'<rect x="{TB_X0:g}" y="{fy(TB_TOP):g}" width="{TB_W:g}" height="{TB_H:g}" style="stroke-width:{W_FRAME:g}"/>']
     for x1, y1, x2, y2 in DIVIDERS:
-        a, b = rel_to_sheet(x1, y1), rel_to_sheet(x2, y2)
+        a, b = rel_to_sheet(x1, y1, sheet), rel_to_sheet(x2, y2, sheet)
         parts.append(f'<line x1="{a[0]:g}" y1="{fy(a[1]):g}" x2="{b[0]:g}" y2="{fy(b[1]):g}" style="stroke-width:{W_THIN:g}"/>')
     parts += ["</g>", '<g id="title_block_text" style="fill:#000000;stroke:none;font-family:Arial">']
     for cell, dx, dy, txt in CAPTIONS:
         cx, cy, _, _ = CELLS[cell]
-        x, y = rel_to_sheet(cx + dx, cy + dy)
+        x, y = rel_to_sheet(cx + dx, cy + dy, sheet)
         parts.append(f'<text x="{x:g}" y="{fy(y):g}" style="font-size:{CAP_SIZE:g}px">{escape(txt)}</text>')
     for name, (cell, dx, dy, size, bold, _) in FIELDS.items():
-        x, y = field_anchor(name)
+        x, y = field_anchor(name, sheet)
         w = "font-weight:bold;" if bold else ""
         parts.append(f'<text id="{name}_field" x="{x:g}" y="{fy(y):g}" freecad:editable="{name}" '
                      f'style="{w}font-size:{size:g}px;text-anchor:middle"><tspan></tspan></text>')
@@ -158,7 +162,7 @@ def template_svg() -> str:
     return "\n".join(parts) + "\n"
 
 
-def write_template(path: str) -> str:
+def write_template(path: str, sheet=A3) -> str:
     with open(path, "w", encoding="utf-8") as fh:
-        fh.write(template_svg())
+        fh.write(template_svg(sheet))
     return path

@@ -10,7 +10,7 @@ import re
 
 from primitives import Circle, Line, Rect, Text, expand_dim, fmt_dec, prim_bbox
 from scale import SCALES
-from tcvn import FRAME_X0, FRAME_X1, FRAME_Y0, FRAME_Y1, TB_X0, TB_Y1
+from tcvn import SHEETS
 from readers import f
 from verify import Checks, check_expressions, close, greedy_match
 
@@ -199,9 +199,10 @@ def check_layout_a(C: Checks, D, sp):
     gap = P["khoang_giua_hinh"]
     kind = "chong" if sep_y >= sep_x else "ngang"
     clear_ok = True
+    sh = SHEETS[D.sheet]
     for v, r in g.items():
-        clear_ok &= (r[0] >= FRAME_X0 + P["khe_vung_ve"] - 1e-6 and r[2] <= FRAME_X1 - P["khe_vung_ve"] + 1e-6 and r[1] >= FRAME_Y0 + P["khe_vung_ve"] - 1e-6
-                     and r[3] <= FRAME_Y1 - P["khe_vung_ve"] + 1e-6 and max(TB_X0 - r[2], r[1] - TB_Y1) >= P["khe_vung_ve"] - 1e-6)
+        clear_ok &= (r[0] >= sh.x0 + P["khe_vung_ve"] - 1e-6 and r[2] <= sh.x1 - P["khe_vung_ve"] + 1e-6 and r[1] >= sh.y0 + P["khe_vung_ve"] - 1e-6
+                     and r[3] <= sh.y1 - P["khe_vung_ve"] + 1e-6 and max(sh.tb_x0 - r[2], r[1] - sh.tb_y1) >= P["khe_vung_ve"] - 1e-6)
     mode_ok = sp.get("bo_cuc", "auto") in ("auto", kind)
     if kind == "chong":
         pos_ok = b[3] <= a[1] - gap + 1e-6 and close(D.meta["plan_origin"][0], D.meta["section_origin"][0], 1e-9)

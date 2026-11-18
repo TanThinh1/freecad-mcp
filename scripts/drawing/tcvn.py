@@ -15,6 +15,28 @@ TB_W, TB_H = 180.0, 65.0
 TB_X0, TB_Y0 = FRAME_X1 - TB_W, FRAME_Y0
 TB_X1, TB_Y1 = FRAME_X1, FRAME_Y0 + TB_H
 
+
+
+class Sheet:
+    """A landscape sheet of the TCVN 7285:2003 series with the drawing frame (left margin 20, other margins 10) and the 180 x 65 title block at the
+    bottom-right corner of the frame (TCVN 5571:2012 figure 2). Sizes (A3 420x297, A2 594x420, A1 841x594) are the 'verified' ones of the profile."""
+
+    def __init__(self, name: str, w: float, h: float):
+        self.name, self.w, self.h = name, w, h
+        self.x0, self.y0, self.x1, self.y1 = 20.0, 10.0, w - 10.0, h - 10.0
+        self.tb_w, self.tb_h = 180.0, 65.0
+        self.tb_x0, self.tb_y0 = self.x1 - self.tb_w, self.y0
+        self.tb_x1, self.tb_y1 = self.x1, self.y0 + self.tb_h
+        self.frame_w, self.frame_h = self.x1 - self.x0, self.y1 - self.y0
+
+    def __repr__(self):
+        return f"Sheet({self.name} {self.w:g}x{self.h:g}, frame {self.frame_w:g}x{self.frame_h:g})"
+
+
+SHEETS = {"A3": Sheet("A3", 420.0, 297.0), "A2": Sheet("A2", 594.0, 420.0), "A1": Sheet("A1", 841.0, 594.0)}
+SHEET_ORDER = ("A3", "A2", "A1")
+A3 = SHEETS["A3"]
+
 W_FRAME, W_THIN, W_THICK = 0.7, 0.25, 0.5      # mm; A3 pair thick/thin = 0.5/0.25
 ARIAL_CAP = 0.716                              # Arial digit/capital height as a fraction of the em size (measured in S2)
 

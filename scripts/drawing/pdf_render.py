@@ -20,7 +20,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) if "__file__" in g
 
 def symbol_svg(D, profile) -> str:
     from primitives import Circle, Line, Rect, Text, cap_to_em
-    from tcvn import SHEET_H, SHEET_W, layer_style
+    from tcvn import SHEETS, layer_style
+
+    SHEET_W, SHEET_H = SHEETS[D.sheet].w, SHEETS[D.sheet].h
 
     fy = lambda y: SHEET_H - y
     rows = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{SHEET_W:g}mm" height="{SHEET_H:g}mm" viewBox="0 0 {SHEET_W:g} {SHEET_H:g}">']
@@ -81,7 +83,7 @@ def main():
         page.addView(sym)
         sym.Symbol = open(job["symbol"], encoding="utf-8").read()
         sym.Scale = 1.0
-        sym.X, sym.Y = 210.0, 148.5
+        sym.X, sym.Y = job.get("sheet_w", 420.0) / 2, job.get("sheet_h", 297.0) / 2
         doc.recompute()
         pump(1.0)
         page.ViewObject.doubleClicked()

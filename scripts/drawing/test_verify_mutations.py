@@ -149,6 +149,38 @@ def main():
     verify.check_pdf(C, D2, sp2, dx2, pdf2, None, profile)
     expect("pdf_dxf_without_dimension_texts", "5.6" in failed(C), f"không đạt: {sorted(failed(C))}")
 
+    # ---- A2 sheet (4.3): the same checks must follow the sheet size (frame 564x400, title block 180x65 at the bottom-right of the frame)
+    pdf6 = os.path.join(OUT, "b6_a2_24000x72000", "b6_a2_24000x72000.pdf")
+    if os.path.isfile(pdf6):
+        sp6, D6 = load("b6_a2_24000x72000", profile)
+        dxf6 = os.path.join(work, "b6.dxf")
+        render_dxf(D6, profile, dxf6)
+        C = verify.Checks()
+        dx6 = verify.check_dxf(C, D6, sp6, profile, dxf6, do_fc=False)
+        expect("control_a2_primitives_and_dxf", D6.sheet == "A2" and not failed(C), f"sheet {D6.sheet}; không đạt: {sorted(failed(C))}")
+        C = verify.Checks()
+        verify.check_pdf(C, D6, sp6, dx6, pdf6, "png-not-checked", profile)
+        expect("control_a2_pdf_passes_frame_564x400", not (failed(C) - {"4.6"}), f"không đạt: {sorted(failed(C))}")
+        Dm = copy.deepcopy(D6)
+        Dm.sheet = "A3"
+        C = verify.Checks()
+        verify.check_pdf(C, Dm, sp6, dx6, pdf6, None, profile)
+        expect("pdf_a2_drawing_checked_as_A3", {"4.1", "4.2"} <= failed(C), f"không đạt: {sorted(failed(C))}")
+        Dm = copy.deepcopy(D6)
+        fr = [p for p in Dm.prims if p.tag == "frame"][0]
+        fr.p1 = (fr.p1[0] - 5.0, fr.p1[1])
+        C = verify.Checks()
+        verify.check_pdf(C, Dm, sp6, dx6, pdf6, None, profile)
+        expect("pdf_a2_frame_expected_5mm_narrower", "5.1" in failed(C), f"không đạt: {sorted(failed(C))}")
+        Dm = copy.deepcopy(D6)
+        tb = [p for p in Dm.prims if p.tag == "tb_outline"][0]
+        tb.p0 = (tb.p0[0] - 10.0, tb.p0[1])
+        C = verify.Checks()
+        verify.check_pdf(C, Dm, sp6, dx6, pdf6, None, profile)
+        expect("pdf_a2_title_block_expected_10mm_wider", "5.1" in failed(C), f"không đạt: {sorted(failed(C))}")
+    else:
+        expect("a2_cases_skipped", False, f"không có {pdf6} (chạy make_drawing cho b6 trước)")
+
     ok_all = True
     for name, ok, detail in results:
         ok_all &= bool(ok)
