@@ -153,7 +153,7 @@ def _group_bboxes(D):
     return out
 
 
-def _hits_text(t, line, step=0.05):
+def _hits_text(t, line, step=0.05, v_hi=1.05):
     """True when the segment passes through the (digit-height) text box of t; sampled every `step` mm paper."""
     from primitives import cap_to_em
     from tcvn import est_width
@@ -165,7 +165,7 @@ def _hits_text(t, line, step=0.05):
     for i in range(n + 1):
         px, py = ax + (bx - ax) * i / n - t.pos[0], ay + (by - ay) * i / n - t.pos[1]
         u, v = px * c + py * s_, -px * s_ + py * c
-        if x0 <= u <= x1 and -0.05 * t.h <= v <= 1.05 * t.h:
+        if x0 <= u <= x1 and -0.05 * t.h <= v <= v_hi * t.h:
             return True
     return False
 

@@ -14,6 +14,7 @@ from primitives import Circle, Line, Rect, Text, drawing_extent, prim_bbox
 from readers import f, unesc
 from tcvn import FRAME_X0, FRAME_X1, FRAME_Y0, FRAME_Y1, TB_X0, TB_Y1, read_profile
 from verify import Checks, check_expressions, close
+from verify_a import _hits_text
 
 TOL = 1e-6
 TOL_DXF = 1e-3
@@ -324,6 +325,47 @@ def _fits(w, h, g=5.0):
     return (w <= iw and h <= top_h) or (w <= left_w and h <= ih)
 
 
+LEVEL_NOTE = "CAO ĐỘ TÍNH THEO GIAO ĐIỂM TRỤC"
+
+
+def check_level_note(C: Checks, D, sp, X):
+    """1.19: the note that levels are measured to the axis intersections: exactly one text, 2.5 mm, layer CHU, aligned with the top level text and
+    5 mm above it, and not running over any line or other text (measured on the text box including diacritics)."""
+    P = sp["params"]
+    notes = [p for p in D.prims if isinstance(p, Text) and p.s == LEVEL_NOTE]
+    s = D.scale
+    ok = len(notes) == 1
+    detail = f"{len(notes)} chữ ghi chú"
+    if ok:
+        t = notes[0]
+        lt = [p for p in D.prims if isinstance(p, Text) and p.tag == "level_text" and p.s == lvl_text(X["top_fr"])]
+        near = bool(lt) and abs(t.pos[0] - lt[0].pos[0]) <= 1.0 and 3.0 <= t.pos[1] - lt[0].pos[1] <= 8.0
+        size = close(t.h, 2.5, 1e-9) and t.layer == "CHU" and t.rot == 0
+        lines = [p for p in D.prims if isinstance(p, Line) and not p.sheet]
+        hit_l = [p.tag for p in lines if _hits_text(t, p, v_hi=1.45)]
+        bb = _tbox(t)
+        hit_t = [p.s for p in D.prims if isinstance(p, Text) and p is not t and not p.sheet and _boxes_overlap(bb, _tbox(p))]
+        ok = near and size and not hit_l and not hit_t
+        detail = (f"1 chữ {t.s!r} cao {t.h:g} mm lớp {t.layer}; cạnh chữ cao độ đỉnh {near} (cùng lề trái, cao hơn 3-8 mm); đè nét: {sorted(set(hit_l))}; đè chữ: {hit_t}")
+    C.add(1, "1.19", "ghi chú 'CAO ĐỘ TÍNH THEO GIAO ĐIỂM TRỤC': đúng một chữ cao 2,5 mm, cạnh cao độ đỉnh, không đè nét/chữ khác", ok, detail)
+
+
+def _tbox(t):
+    """Tight box of a text: width from est_width, height from the baseline up to the cap height (1.45 x cap when it has Vietnamese diacritics)."""
+    from primitives import cap_to_em
+    from tcvn import est_width
+    w = est_width(t.s, cap_to_em(t.h), t.bold)
+    x0, x1 = {"left": (0.0, w), "center": (-w / 2, w / 2), "right": (-w, 0.0)}[t.halign]
+    hi = 1.45 if any(ord(c) > 127 for c in t.s) else 1.05
+    c, s_ = math.cos(math.radians(t.rot)), math.sin(math.radians(t.rot))
+    pts = [(t.pos[0] + u * c - v * s_, t.pos[1] + u * s_ + v * c) for u in (x0, x1) for v in (-0.05 * t.h, hi * t.h)]
+    return min(p[0] for p in pts), min(p[1] for p in pts), max(p[0] for p in pts), max(p[1] for p in pts)
+
+
+def _boxes_overlap(a, b):
+    return not (a[2] <= b[0] or b[2] <= a[0] or a[3] <= b[1] or b[3] <= a[1])
+
+
 # ------------------------------------------------------------------ 1. primitives
 def check_primitives_c(C: Checks, D, sp):
     X = expect_values(sp)
@@ -628,6 +670,7 @@ def check_primitives_c(C: Checks, D, sp):
 
     # ---- 1.16 / 1.17 scale and layout
     check_layout_c(C, D, sp, X)
+    check_level_note(C, D, sp, X)
 
     # ---- 1.18 optional member axes
     ma = [p for p in by("member_axis") if isinstance(p, Line)]
@@ -785,10 +828,11 @@ def check_dxf_c(C: Checks, D, sp, dx):
     scn = [t for lay, t in txt if t.startswith("TỶ LỆ ")]
     plain = [t for lay, t in txt if re.fullmatch(r"1:\d+", t)]
     sc_ok = scn == [f"TỶ LỆ 1:{D.scale}"] and all(t == f"1:{D.scale}" for t in plain)
+    note_ok = sum(1 for lay, t in txt if t == LEVEL_NOTE) == 1
     ti = [t for lay, t in txt if t == TITLE]          # the view title (+ the same words in the title-block cell 3 when khung_ten.ten_ban_ve says so)
     C.add(2, "2.8", "DXF: chữ kích thước (nhịp, cao_cột, cao đỉnh, nhô — làm tròn nửa lên), cao độ +0.000/+cao_cột/+cao đỉnh, chữ độ dốc, nhãn tiết diện, A/B, tên hình và tỷ lệ",
-          dim_txt == want_dim and lvl_txt == want_lvl and lvl_pair_ok and slope_ok and lab_ok and ab == ["A", "B"] and sc_ok and len(ti) >= 1,
-          f"kích thước {dim_txt} (cần {want_dim}); cao độ {lvl_txt} (cần {want_lvl}; mỗi chữ đúng mức: {lvl_pair_ok}); độ dốc {slope}; nhãn {labs}; A/B {ab}; tên hình {len(ti)}; tỷ lệ {sc_ok}")
+          dim_txt == want_dim and lvl_txt == want_lvl and lvl_pair_ok and slope_ok and lab_ok and ab == ["A", "B"] and sc_ok and note_ok and len(ti) >= 1,
+          f"kích thước {dim_txt} (cần {want_dim}); cao độ {lvl_txt} (cần {want_lvl}; mỗi chữ đúng mức: {lvl_pair_ok}); độ dốc {slope}; nhãn {labs}; A/B {ab}; tên hình {len(ti)}; tỷ lệ {sc_ok}; ghi chú cao độ đúng 1 chữ {note_ok}")
 
 
 def unesc_(e):

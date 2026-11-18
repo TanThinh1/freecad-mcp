@@ -26,6 +26,7 @@ from tcvn import ARIAL_CAP, est_width, LAYER_AXIS, LAYER_BUBBLE, LAYER_COLUMN, L
 LAYER_MAIN, LAYER_RAFTER, LAYER_LEVEL = "NET-CHINH", "KEO", "NET-TAM"
 NEEDED_LAYERS = (LAYER_MAIN, LAYER_RAFTER, LAYER_LEVEL, LAYER_COLUMN, LAYER_AXIS, LAYER_BUBBLE, LAYER_DIM, LAYER_TEXT, LAYER_FRAME, LAYER_THIN)
 VIEW_TITLE = "MẶT CẮT NGANG KHUNG"
+LEVEL_NOTE = "CAO ĐỘ TÍNH THEO GIAO ĐIỂM TRỤC"       # printed above the top level: levels are those of the axis intersections
 DEFAULT_SHEET_NO = "KC-02"       # drawing number used when khung_ten.ky_hieu_ban_ve is empty
 SYMBOL_BAR, SYMBOL_TRI = 19.0, 3.0          # level symbol (paper mm), same as type A
 
@@ -150,8 +151,10 @@ def layout(sp: dict, s: int):
         add(Line(layer=LAYER_TEXT, tag="level_tri", p1=(xm, y), p2=(xm + 1.5, y + SYMBOL_TRI)))
         add(Line(layer=LAYER_TEXT, tag="level_bar", p1=(xm - 1.5, y + SYMBOL_TRI), p2=(xm - 1.5 + SYMBOL_BAR, y + SYMBOL_TRI)))
         add(Text(layer=LAYER_TEXT, tag="level_text", s=label, pos=(xm - 1.0, y + SYMBOL_TRI + 0.8), h=hb))
-    # ---- section labels and slope texts
     cap, kn = P["cao_chu_so_lieu"], P["khoang_cach_nhan"]
+    xm_top = x_m + (SYMBOL_BAR + 3.0 if stagger else 0.0)
+    add(Text(layer=LAYER_TEXT, tag="level_note", s=LEVEL_NOTE, pos=(xm_top - 1.0, y_top + SYMBOL_TRI + 0.8 + hb + 1.5), h=cap))
+    # ---- section labels and slope texts
     add(Text(layer=LAYER_TEXT, tag="section_label", s=sp["col"]["text"], pos=(X(hc / 2.0) + kn, X(H) / 2.0), h=cap))
     add(Text(layer=LAYER_TEXT, tag="section_label", s=sp["col"]["text"], pos=(X(nh - hc / 2.0) - kn, X(H) / 2.0), h=cap, halign="right"))
     slope_txt = f"i = {percent_text(sp['do_doc_mai'])}% ({_fmt_deg(sp['theta_deg'])}°)"

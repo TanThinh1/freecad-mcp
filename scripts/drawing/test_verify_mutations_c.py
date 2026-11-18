@@ -177,6 +177,30 @@ def main():
         for p in by_tag(D, "slope_text"):
             p.s = "i = 15%"
     add("slope_text_without_angle", "c1", slope_one_dp, {"1.13"}, {"2.8"})
+    # ---- 4.1 note "CAO ĐỘ TÍNH THEO GIAO ĐIỂM TRỤC"
+    NOTE = "CAO ĐỘ TÍNH THEO GIAO ĐIỂM TRỤC"
+    def del_note(D):
+        D.prims.remove(by_tag(D, "level_note")[0])
+    add("level_note_deleted", "c1", del_note, {"1.19"}, {"2.8"})
+    def edit_note(D):
+        by_tag(D, "level_note")[0].s = "CAO ĐỘ TÍNH THEO MÉP TRÊN KÈO"
+    add("level_note_text_edited", "c1", edit_note, {"1.19"}, {"2.8"})
+    def note_dup(D):
+        D.prims.append(copy.deepcopy(by_tag(D, "level_note")[0]))
+    add("level_note_duplicated", "c1", note_dup, {"1.19"}, {"2.8"})
+    def note_on_level_line(D):
+        n_ = by_tag(D, "level_note")[0]
+        lv = max(by_tag(D, "level_line"), key=lambda p: p.p1[1])
+        n_.pos = (n_.pos[0], lv.p1[1] - 0.6)              # baseline just under the top datum line: the box crosses the line
+    add("level_note_over_level_line", "c1", note_on_level_line, {"1.19"}, None)
+    def note_small(D):
+        by_tag(D, "level_note")[0].h = 1.8
+    add("level_note_wrong_height_1.8", "c1", note_small, {"1.19"}, None)
+    def note_far(D):
+        n_ = by_tag(D, "level_note")[0]
+        n_.pos = (n_.pos[0] - 80.0, n_.pos[1])
+    add("level_note_moved_80mm_away", "c1", note_far, {"1.19"}, None)
+
     # ---- findings of the independent review (all of these used to slip through)
     def swap_level_texts(D, a_, b_):
         ta = [p for p in by_tag(D, "level_text") if p.s == a_][0]
