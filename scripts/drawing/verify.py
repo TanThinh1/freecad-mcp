@@ -78,7 +78,7 @@ def check_expressions(C: "Checks", texts, group: int, cid: str, where: str):
             q = (D(a.replace(",", ".")) / D(b.replace(",", "."))).quantize(D(1).scaleb(cd.as_tuple().exponent), rounding=decimal.ROUND_HALF_UP)
             if q != cd:
                 bad.append(f"{t!r}: {a}/{b} = {q:f} khi làm tròn đúng số chữ số thập phân hiển thị, ≠ {c}")
-        if not found and ("=" in t or "≈" in t):
+        if not found and ("=" in t or "≈" in t) and not re.fullmatch(r"[A-Za-z]+ = \d+(?:,\d+)?%?(?: \(\d+(?:,\d+)?°\))?", t):   # plain assignments like 'i = 15% (8,5°)' are not arithmetic
             bad.append(f"{t!r}: biểu thức không đọc được")
     C.add(group, cid, f"{where}: mọi biểu thức số học in trên bản vẽ (a x b = c, a/b ≈ c) đúng với số hiển thị", not bad, f"{n} biểu thức đã kiểm" + (f"; SAI: {bad[:3]}" if bad else ""))
 
@@ -251,6 +251,9 @@ def check_dxf(C: Checks, D, sp, profile, dxf: str, do_fc: bool):
             xs, ys = [float(v) for v in e["rec"][10]], [float(v) for v in e["rec"][20]]
             sizes[(round(max(xs) - min(xs), 3), round(max(ys) - min(ys), 3))] += 1
         C.add(2, "2.8", "cột trong DXF đúng b × h (mm thật)", dict(sizes) == {(round(b, 3), round(h, 3)): 2 * N}, f"{dict(sizes)}")
+    elif D.kind == "C":
+        import verify_c
+        verify_c.check_dxf_c(C, D, sp, dx)
     else:
         import verify_a
         verify_a.check_dxf_a(C, D, sp, dx)
@@ -349,6 +352,13 @@ def pdf_text_match(D, paths):
             tola, tolb = max(0.6, 0.2 * w), max(0.7, 0.5 * t.h)
             hit = [g for g in glyphs if close((g["bb"][0] + g["bb"][2]) / 2, cx, tola) and close((g["bb"][1] + g["bb"][3]) / 2, cy, tolb)]
             gw = lambda g: g["bb"][2] - g["bb"][0]
+        elif t.rot % 90 != 0:
+            # slanted text: centre of the string = anchor + R(rot) * (offset along the baseline, half cap height); any glyph near it counts (no ink-width test)
+            phi = math.radians(t.rot)
+            cx, cy = ax + off * math.cos(phi) - (t.h / 2) * math.sin(phi), top(ay + off * math.sin(phi) + (t.h / 2) * math.cos(phi))
+            tola = tolb = max(0.8, 0.25 * w)
+            hit = [g for g in glyphs if close((g["bb"][0] + g["bb"][2]) / 2, cx, tola) and close((g["bb"][1] + g["bb"][3]) / 2, cy, tolb)]
+            gw = lambda g: g["bb"][2] - g["bb"][0]
         else:
             cx, cy = ax - t.h / 2, top(ay + off)
             tola, tolb = max(0.7, 0.5 * t.h), max(0.6, 0.2 * w)
@@ -443,6 +453,9 @@ def run_all(D, sp, profile, files: dict, do_fc=True, do_dwg=True, do_pdf=True, d
     if D.kind == "A":
         import verify_a
         verify_a.check_primitives_a(C, D, sp)
+    elif D.kind == "C":
+        import verify_c
+        verify_c.check_primitives_c(C, D, sp)
     else:
         check_primitives_b(C, D, sp)
     dx = check_dxf(C, D, sp, profile, files["dxf"], do_fc)
