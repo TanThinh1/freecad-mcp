@@ -234,6 +234,13 @@ def main():
         e.p1 = (e.p1[0], e.p1[1] + 6.0)
     need({"1.15"}, prim_check(mut(floating_ext), sp1), "prim_extension_line_starts_6mm_off_the_geometry")
 
+    # (9) 2.x: stringers belong on NET-CHINH, not on KEO (rafters)
+    def stringer_on_keo(Dm):
+        for p in Dm.prims:
+            if p.tag.startswith("stringer_"):
+                p.layer = "KEO"
+    need({"1.21"}, prim_check(mut(stringer_on_keo), sp1), "prim_stringer_on_layer_KEO")
+    need({"2.5", "2.7"}, dxf_of(mut(stringer_on_keo), "dxf_stringer_on_keo"), "dxf_stringer_on_layer_KEO")
     # a spec that disagrees with the (correct) drawing must fail too: b changed in the spec only
     sp_b = dict(sp1, b=260)
     need({"1.2", "1.3", "1.4"}, prim_check(D1, sp_b), "spec_b_260_vs_drawing_b_250")

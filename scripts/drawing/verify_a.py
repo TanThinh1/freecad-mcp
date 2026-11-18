@@ -120,6 +120,10 @@ def check_primitives_a(C: Checks, D, sp):
     check_layout_a(C, D, sp)
     check_dim_text_clear(C, D)
     check_extras_a(C, D, sp)
+    st_l = [(p.tag, p.layer) for p in D.prims if p.tag.startswith("stringer_")]
+    wrong = [x for x in st_l if x[1] != "NET-CHINH"] + [(p.tag, p.layer) for p in D.prims if p.layer in ("KEO", "COT")]
+    C.add(1, "1.21", "dầm cốn (stringer_*) nằm trên layer NET-CHINH (nét cơ bản, thấy); không có nét nào của thang trên layer KEO (kèo) hoặc COT (cột)", bool(st_l) and not wrong,
+          f"{len(st_l)} nét dầm cốn; sai layer: {wrong[:3]}")
     check_expressions(C, [p.s for p in D.prims if isinstance(p, Text)], 1, "1.20", "chữ trên bản vẽ")
     if sp.get("warnings"):
         C.info(1, "1.11", "cảnh báo mềm (không phải lỗi)", " | ".join(sp["warnings"]))
@@ -354,13 +358,15 @@ def check_dxf_a(C: Checks, D, sp, dx):
     n_ok, miss = greedy_match(exp, main, lambda e, g: _same_seg(e, g, TOL_DXF))
     lv = ents.get("NET-TAM", [])
     lv_ok = sorted(round(g[0][1], 3) for g in lv if close(g[0][1], g[1][1], 1e-6)) == [0.0, round(H, 3)]
-    st = ents.get("KEO", [])
+    st = ents.get("NET-CHINH", [])
+    stray = [lay for lay in ("KEO", "COT") if ents.get(lay)]          # the stair has no rafters / columns: nothing may be on those layers
     top_ok = any(_same_seg(g, ((0.0, h), (L, H)), TOL_DXF) for g in st)
     cos_t = math.cos(math.atan(h / b))
     low_ok = any(abs(g[1][0] - L) < TOL_DXF and abs(g[1][0] - g[0][0]) > 1e-9 and close((H - g[1][1]) * cos_t, ds["bd"], TOL_DXF)
                  and close((g[1][1] - g[0][1]) / (g[1][0] - g[0][0]), h / b, 1e-9) for g in st)
     C.add(2, "2.7", "DXF (mm thật, gốc ở mép sàn dưới): răng cưa đúng công thức, đường cao độ z = 0 và z = cao_tang, dầm cốn đúng độ dốc và chiều cao",
-          n_ok == len(exp) and lv_ok and top_ok and low_ok, f"{n_ok}/{len(exp)} đoạn răng cưa; cao độ {lv_ok}; mép trên dầm {top_ok}; mép dưới dầm {low_ok}; thiếu {miss[:2]}")
+          n_ok == len(exp) and lv_ok and top_ok and low_ok and not stray,
+          f"{n_ok}/{len(exp)} đoạn răng cưa; cao độ {lv_ok}; mép trên dầm {top_ok}; mép dưới dầm {low_ok} (dầm cốn trên layer NET-CHINH, không có gì trên layer KEO/COT: {not stray}); thiếu {miss[:2]}")
     polys = [e for e in dx["ents"] if e["type"] == "LWPOLYLINE" and e["layer"] == "NET-CHINH"]
     plan = []
     for e in polys:

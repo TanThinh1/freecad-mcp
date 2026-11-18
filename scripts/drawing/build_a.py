@@ -24,7 +24,8 @@ from scale import SCALES, ScaleReject, place_rects
 from spec_b import SpecError
 from tcvn import LAYER_DIM, LAYER_FRAME, LAYER_TEXT, LAYER_THIN, est_width
 
-LAYER_MAIN, LAYER_STRINGER, LAYER_LEVEL, LAYER_HIDDEN = "NET-CHINH", "KEO", "NET-TAM", "NET-KHUAT"
+# The profile has no stair/beam layer; KEO is "rafters / roof trusses". The stringers are visible steel outlines -> NET-CHINH ("Nét cơ bản (thấy) - đậm", 0.5 mm).
+LAYER_MAIN, LAYER_STRINGER, LAYER_LEVEL, LAYER_HIDDEN = "NET-CHINH", "NET-CHINH", "NET-TAM", "NET-KHUAT"
 NEEDED_LAYERS = (LAYER_MAIN, LAYER_STRINGER, LAYER_LEVEL, LAYER_HIDDEN, LAYER_THIN, LAYER_DIM, LAYER_TEXT, LAYER_FRAME)
 VIEW_TITLE_PLAN, VIEW_TITLE_SECTION = "MẶT BẰNG THANG", "MẶT CẮT 1-1"
 DEFAULT_TITLE = "MẶT BẰNG VÀ MẶT CẮT CẦU THANG"
