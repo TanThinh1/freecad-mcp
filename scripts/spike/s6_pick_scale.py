@@ -15,7 +15,7 @@ from __future__ import annotations
 
 FRAME_W, FRAME_H = 390.0, 277.0
 TB_W, TB_H = 180.0, 65.0
-SCALES = (20, 25, 50, 100, 200, 500)
+SCALES = (20, 50, 100, 200, 500)
 
 
 def _margins(m):
@@ -48,8 +48,8 @@ def _selftest():
     assert pick_scale((63500, 33000)) == 200, layout_scale((63500, 33000))
     # small part: 3000 x 1500 -> the largest scale in the list
     assert pick_scale((3000, 1500)) == 20
-    # 6000 x 4000: 1:20 is 300x200 (+40) -> too high for the top band -> 1:25
-    assert pick_scale((6000, 4000)) == 25
+    # 6000 x 4000: 1:20 is 300x200 (+40) -> too high for the top band -> 1:50 (1:25 is not in the TCVN 7286:2003 series)
+    assert pick_scale((6000, 4000)) == 50
     # tall plan 15000 x 20000 at 1:100 is 150 x 200 (+40 mm) = 190 x 240: too tall for the top band (212), fits the LEFT band
     r = layout_scale((15000, 20000))
     assert (r["scale"], r["band"]) == (100, "left"), r

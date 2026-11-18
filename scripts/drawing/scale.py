@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from tcvn import A3, FRAME_X0, FRAME_X1, FRAME_Y0, FRAME_Y1, SHEET_ORDER, SHEETS, TB_H, TB_W, TB_X0, TB_Y1
 
-SCALES = (20, 25, 50, 100, 200, 500)
+SCALES = (20, 50, 100, 200, 500)       # TCVN 7286:2003 reduction series available on an A3-A1 drawing (profile.yaml: 1:20, 1:50, 1:100, 1:200, 1:500)
 FRAME_W, FRAME_H = FRAME_X1 - FRAME_X0, FRAME_Y1 - FRAME_Y0
 # usable regions in sheet coordinates (x0, y0, x1, y1)
 BAND_TOP = (FRAME_X0, TB_Y1, FRAME_X1, FRAME_Y1)

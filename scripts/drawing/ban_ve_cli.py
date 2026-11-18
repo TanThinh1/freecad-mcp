@@ -47,7 +47,7 @@ COMMON_RULES = [
     "SỐ BẮT BUỘC (thiếu thì HỎI LẠI khách, không tự bịa): thang = cao_tang, so_bac, be_rong_ve; luoi_cot = nhip, dai_nha, buoc_cot; khung_ngang = nhip, cao_cot, do_doc_mai, so_mai. "
     "Các số còn lại có giá trị mặc định (xem mac_dinh); kiem_tra_spec trả da_dung_mac_dinh để nói rõ với khách.",
     "Mọi kích thước tính bằng mm. nhip, cao_cot, cao_tang... phải là số nguyên mm dương (không làm tròn âm thầm).",
-    "ty_le: \"auto\" (mặc định, chọn tỷ lệ lớn nhất còn vừa khổ A3) hoặc 1:20, 1:25, 1:50, 1:100, 1:200, 1:500.",
+    "ty_le: \"auto\" (mặc định, chọn tỷ lệ lớn nhất còn vừa khổ A3) hoặc 1:20, 1:50, 1:100, 1:200, 1:500 (dãy TCVN 7286:2003).",
     "Không tự xoay hình; nếu không vừa khung A3 (khung 390x277 trừ góc khung tên 180x65) sẽ báo lỗi kèm kích thước cần thiết.",
     "Tên bản vẽ/tệp (ten) do hệ thống tự sinh từ loại và số liệu; kết quả nằm trong thư mục out\\<ten>\\.",
 ]

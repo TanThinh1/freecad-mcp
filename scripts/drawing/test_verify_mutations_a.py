@@ -168,7 +168,7 @@ def main():
     need({"1.13", "1.4"}, prim_check(mut(plan_over_section), sp1), "prim_plan_moved_up_over_section")
     def view_scales_swapped(Dm):
         Dm.meta["view_scales"] = {"section": Dm.view_scale("plan"), "plan": Dm.view_scale("section")}
-    need({"1.1", "1.3", "1.12"}, prim_check(mut(view_scales_swapped), sp1), "meta_view_scales_swapped")
+    need({"1.1", "1.3", "1.12"}, prim_check(mut(view_scales_swapped, D2), sp2), "meta_view_scales_swapped_a2_1:20_1:50")
     # (7) 2.2: dimension labels must not run over ticks / extension lines (the old placement of "176,5")
     def label_back_over_tick(Dm):
         d = [x for x in Dm.dims if x.text == "176,5"][0]

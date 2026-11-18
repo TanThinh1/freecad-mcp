@@ -18,7 +18,7 @@ from verify_a import _hits_text
 
 TOL = 1e-6
 TOL_DXF = 1e-3
-SCALES_C = (20, 25, 50, 100, 200, 500)
+SCALES_C = (20, 50, 100, 200, 500)
 TITLE = "MẶT CẮT NGANG KHUNG"
 OUTLINE_TAGS = ("col_edge", "raf_edge", "joint_step")
 EXP_LAYER = {"col_edge": "COT", "raf_edge": "KEO", "joint_step": "KEO"}
@@ -729,7 +729,7 @@ def check_layout_c(C: Checks, D, sp, X):
         sc_ok, why = False, f"cặp ({D.sheet}, 1:{D.scale}) không nằm trong danh sách ứng viên {order[:6]}…"
     if sp.get("scale"):
         sc_ok = sc_ok and D.scale == sp["scale"]
-    C.add(1, "1.16", "khổ giấy + tỷ lệ theo quy tắc: ưu tiên A3, lên A2 rồi A1 chỉ khi khổ nhỏ hơn không vừa ở tỷ lệ ≤ 1:100; tỷ lệ lớn nhất trong 20/25/50/100/200/500 còn vừa vùng vẽ (khung trừ góc khung tên 180×65); đo: vừa ở cặp đã chọn, suy luận: các cặp đứng trước không vừa", sc_ok,
+    C.add(1, "1.16", "khổ giấy + tỷ lệ theo quy tắc: ưu tiên A3, lên A2 rồi A1 chỉ khi khổ nhỏ hơn không vừa ở tỷ lệ ≤ 1:100; tỷ lệ lớn nhất trong 20/50/100/200/500 còn vừa vùng vẽ (khung trừ góc khung tên 180×65); đo: vừa ở cặp đã chọn, suy luận: các cặp đứng trước không vừa", sc_ok,
           f"khổ {D.sheet}, tỷ lệ 1:{D.scale}, hình {w:.1f}×{h:.1f} mm giấy (đo); {why}")
     C.add(1, "1.17", "bố cục: toàn bộ nét/chữ nằm trong khung (cách mép ≥ 5 mm) và cách khung tên 180×65 ≥ 5 mm, không xoay tờ giấy (chữ chỉ nằm ngang, đứng hoặc song song kèo)", inside and tb_clear and all(min(abs(abs(getattr(p, "rot", 0.0)) - v) for v in (0.0, 90.0, X["theta_deg"])) < 1e-6 for p in D.prims),
           f"bbox {tuple(round(v, 1) for v in ext)}; trong khung {inside}; cách khung tên {max(sh.tb_x0 - ext[2], ext[1] - sh.tb_y1):.1f} mm")

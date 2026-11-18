@@ -11,7 +11,7 @@ import math
 import re
 from fractions import Fraction
 
-SCALES = (20, 25, 50, 100, 200, 500)
+SCALES = (20, 50, 100, 200, 500)       # same series as scale.SCALES (TCVN 7286:2003)
 MAX_AXES = 100            # N = dai_nha / buoc_cot + 1 vertical axes
 
 # Layout parameters (paper mm). The defaults are project defaults, NOT dimensions verified from a TCVN standard.
