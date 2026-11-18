@@ -1,0 +1,20 @@
+{
+  "loai": "A",
+  "ten": "a2_3000x17",
+  "cao_tang": 3000,
+  "so_bac": 17,
+  "be_rong_mat_bac": 260,
+  "be_rong_ve": 900,
+  "chieu_day_tam": 3,
+  "dam_con": "H60x120x2",
+  "ty_le": "auto",
+  "khung_ten": {
+    "don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP",
+    "cong_trinh": "CẦU THANG THÉP KHO",
+    "chu_dau_tu": "CÔNG TY TNHH THƯƠNG MẠI ABC",
+    "ten_ban_ve": "MẶT BẰNG VÀ MẶT CẮT CẦU THANG",
+    "ky_hieu_ban_ve": "KC-02",
+    "loai_ho_so": "BVTC",
+    "ngay": "18/11/2026"
+  }
+}

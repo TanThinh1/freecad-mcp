@@ -1,0 +1,20 @@
+{
+  "loai": "A",
+  "ten": "a3_4200x24",
+  "cao_tang": 4200,
+  "so_bac": 24,
+  "be_rong_mat_bac": 240,
+  "be_rong_ve": 1000,
+  "chieu_day_tam": 4,
+  "dam_con": "H60x120x2",
+  "ty_le": "auto",
+  "khung_ten": {
+    "don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP",
+    "cong_trinh": "CẦU THANG THÉP XƯỞNG",
+    "chu_dau_tu": "CÔNG TY CỔ PHẦN CƠ KHÍ CHẾ TẠO",
+    "ten_ban_ve": "MẶT BẰNG VÀ MẶT CẮT CẦU THANG",
+    "ky_hieu_ban_ve": "KC-03",
+    "loai_ho_so": "BVTC",
+    "ngay": "18/11/2026"
+  }
+}
