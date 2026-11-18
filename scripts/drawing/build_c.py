@@ -141,7 +141,7 @@ def layout(sp: dict, s: int):
     # ---- level markers on the right (datum lines from the structure to the symbol)
     x_m = X(nh + hc / 2.0) + g - 4.0
     x_col_out = X(nh + hc / 2.0)
-    x_top_line = X(min(nodes[1][0] + d_exit, nh + hc / 2.0)) if sp["so_mai"] == 2 else x_col_out
+    x_top_line = x_col_out            # the top datum starts at the outer face of column B (like the eave datum), never near the ridge, so it does not touch the roof
     stack_h = SYMBOL_TRI + 0.8 + hb + 1.0                       # vertical room one level symbol + text needs
     stagger = (y_top - y_cot) < stack_h                          # rise too small on paper: put the top symbol further right instead of on top of the eave one
     for y, label, x0, xm in ((0.0, "+0.000", None, x_m), (y_cot, level_text(H), x_col_out, x_m),
@@ -154,7 +154,7 @@ def layout(sp: dict, s: int):
         add(Text(layer=LAYER_TEXT, tag="level_text", s=label, pos=(xm - 1.0, y + SYMBOL_TRI + 0.8), h=hb))
     cap, kn = P["cao_chu_so_lieu"], P["khoang_cach_nhan"]
     xm_top = x_m + (SYMBOL_BAR + 3.0 if stagger else 0.0)
-    add(Text(layer=LAYER_TEXT, tag="level_note", s=LEVEL_NOTE, pos=(xm_top - 1.0, y_top + SYMBOL_TRI + 0.8 + hb + 1.5), h=cap))
+    add(Text(layer=LAYER_TEXT, tag="level_note", s=LEVEL_NOTE, pos=(xm_top - 1.0, y_top + SYMBOL_TRI + 0.8 + hb + 0.9), h=cap))
     # ---- section labels and slope texts
     add(Text(layer=LAYER_TEXT, tag="section_label", s=sp["col"]["text"], pos=(X(hc / 2.0) + kn, X(H) / 2.0), h=cap))
     add(Text(layer=LAYER_TEXT, tag="section_label", s=sp["col"]["text"], pos=(X(nh - hc / 2.0) - kn, X(H) / 2.0), h=cap, halign="right"))
