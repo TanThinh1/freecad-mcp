@@ -60,6 +60,7 @@ class Dim:
     role: str = "chain"   # chain | overall | single
     ext_lines: bool = True
     text: str | None = None   # explicit label (e.g. "183,3" or "19 x 250 = 4750"); default = fmt_value(value)
+    text_side: bool = False   # print the label beside the dimension line (kind 'v': horizontal, right of the line; kind 'h': right of the right end) when it does not fit between the ticks
     view: str = ""            # view the dimension belongs to when a sheet carries views at different scales ("" = the sheet scale)
 
 
@@ -86,7 +87,11 @@ def expand_dim(d: Dim, P: dict) -> list[Prim]:
                 out.append(Line(layer=d.layer, tag=tag + "_ext", p1=(p[0], d.ext_from + sgn * exo), p2=(p[0], ly + sgn * exe)))
             out.append(Line(layer=d.layer, tag=tag + "_tick", p1=(p[0] - asz / 2, ly - asz / 2), p2=(p[0] + asz / 2, ly + asz / 2)))
         out.append(Line(layer=d.layer, tag=tag + "_line", p1=(d.p1[0], ly), p2=(d.p2[0], ly)))
-        out.append(Text(layer=d.layer, tag=tag + "_text", s=d.text if d.text is not None else fmt_value(d.value), pos=((d.p1[0] + d.p2[0]) / 2, ly + gap), h=h, halign="center"))
+        label = d.text if d.text is not None else fmt_value(d.value)
+        if d.text_side:        # label does not fit between the ticks: beside the right end of the dimension line
+            out.append(Text(layer=d.layer, tag=tag + "_text", s=label, pos=(max(d.p1[0], d.p2[0]) + asz / 2 + gap, ly + gap), h=h, halign="left"))
+        else:
+            out.append(Text(layer=d.layer, tag=tag + "_text", s=label, pos=((d.p1[0] + d.p2[0]) / 2, ly + gap), h=h, halign="center"))
     else:
         lx = d.line_pos
         sgn = -1.0 if lx < d.ext_from else 1.0
@@ -95,7 +100,11 @@ def expand_dim(d: Dim, P: dict) -> list[Prim]:
                 out.append(Line(layer=d.layer, tag=tag + "_ext", p1=(d.ext_from + sgn * exo, p[1]), p2=(lx + sgn * exe, p[1])))
             out.append(Line(layer=d.layer, tag=tag + "_tick", p1=(lx - asz / 2, p[1] - asz / 2), p2=(lx + asz / 2, p[1] + asz / 2)))
         out.append(Line(layer=d.layer, tag=tag + "_line", p1=(lx, d.p1[1]), p2=(lx, d.p2[1])))
-        out.append(Text(layer=d.layer, tag=tag + "_text", s=d.text if d.text is not None else fmt_value(d.value), pos=(lx - gap, (d.p1[1] + d.p2[1]) / 2), h=h, rot=90.0, halign="center"))
+        label = d.text if d.text is not None else fmt_value(d.value)
+        if d.text_side:
+            out.append(Text(layer=d.layer, tag=tag + "_text", s=label, pos=(lx + asz / 2 + gap, (d.p1[1] + d.p2[1]) / 2 - h / 2), h=h, halign="left"))
+        else:
+            out.append(Text(layer=d.layer, tag=tag + "_text", s=label, pos=(lx - gap, (d.p1[1] + d.p2[1]) / 2), h=h, rot=90.0, halign="center"))
     return out
 
 

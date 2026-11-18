@@ -118,6 +118,7 @@ def check_primitives_a(C: Checks, D, sp):
     ok10 = [p.s for p in cl] == ["1", "1"] and len(yc) == 2 and all(close(y, w / 2, TOL) for y in yc) and [p.s for p in by("title_section")] == ["MẶT CẮT 1-1"] and [p.s for p in by("title_plan")] == ["MẶT BẰNG THANG"]
     C.add(1, "1.10", "ký hiệu vết cắt 1-1 trên mặt bằng (2 đầu, nhãn 1, ở giữa bề rộng) và tên hai hình", ok10, f"nhãn {[p.s for p in cl]}, y vết cắt {[round(y, 3) for y in yc]} (w/2 = {w / 2:g})")
     check_layout_a(C, D, sp)
+    check_dim_text_clear(C, D)
     check_expressions(C, [p.s for p in D.prims if isinstance(p, Text)], 1, "1.20", "chữ trên bản vẽ")
     if sp.get("warnings"):
         C.info(1, "1.11", "cảnh báo mềm (không phải lỗi)", " | ".join(sp["warnings"]))
@@ -150,6 +151,31 @@ def _group_bboxes(D):
         bbs = [prim_bbox(p) for p in ps]
         out[v] = (min(b[0] for b in bbs), min(b[1] for b in bbs), max(b[2] for b in bbs), max(b[3] for b in bbs))
     return out
+
+
+def _hits_text(t, line, step=0.05):
+    """True when the segment passes through the (digit-height) text box of t; sampled every `step` mm paper."""
+    from primitives import cap_to_em
+    from tcvn import est_width
+    w = est_width(t.s, cap_to_em(t.h), t.bold)
+    x0, x1 = {"left": (0.0, w), "center": (-w / 2, w / 2), "right": (-w, 0.0)}[t.halign]
+    c, s_ = math.cos(math.radians(t.rot)), math.sin(math.radians(t.rot))
+    (ax, ay), (bx, by) = line.p1, line.p2
+    n = max(2, int(math.hypot(bx - ax, by - ay) / step))
+    for i in range(n + 1):
+        px, py = ax + (bx - ax) * i / n - t.pos[0], ay + (by - ay) * i / n - t.pos[1]
+        u, v = px * c + py * s_, -px * s_ + py * c
+        if x0 <= u <= x1 and -0.05 * t.h <= v <= 1.05 * t.h:
+            return True
+    return False
+
+
+def check_dim_text_clear(C: Checks, D):
+    """1.14: no dimension text runs over a tick or an extension line (measured on the text box, digit height)."""
+    segs = [p for p in D.prims if isinstance(p, Line) and p.tag.startswith("dim_") and (p.tag.endswith("_ext") or p.tag.endswith("_tick"))]
+    texts = [p for p in D.prims if isinstance(p, Text) and p.tag.startswith("dim_") and p.tag.endswith("_text")]
+    bad = [(t.s, round(t.pos[0], 1), round(t.pos[1], 1)) for t in texts if any(_hits_text(t, sg) for sg in segs)]
+    C.add(1, "1.14", "chữ kích thước không đè lên tick hay đường gióng (đo theo khung chữ)", not bad, f"{len(texts)} chữ kích thước, {len(segs)} tick/đường gióng; chữ bị đè: {bad}")
 
 
 def check_layout_a(C: Checks, D, sp):

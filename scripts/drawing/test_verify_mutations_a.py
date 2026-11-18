@@ -49,6 +49,7 @@ def main():
     profile = read_profile()
     sp1, D1 = load("a1_3600x20", profile)
     sp2, D2 = load("a2_3000x17", profile)
+    sp3, D3 = load("a7_chung_3600x20", profile)
     work = os.path.join(OUT, "_mutations_a")
     shutil.rmtree(work, ignore_errors=True)
     os.makedirs(work)
@@ -168,6 +169,17 @@ def main():
     def view_scales_swapped(Dm):
         Dm.meta["view_scales"] = {"section": Dm.view_scale("plan"), "plan": Dm.view_scale("section")}
     need({"1.1", "1.3", "1.12"}, prim_check(mut(view_scales_swapped), sp1), "meta_view_scales_swapped")
+    # (7) 2.2: dimension labels must not run over ticks / extension lines (the old placement of "176,5")
+    def label_back_over_tick(Dm):
+        d = [x for x in Dm.dims if x.text == "176,5"][0]
+        t = [p for p in Dm.prims if p.tag == "dim_single_text" and p.s == "176,5"][0]
+        t.rot, t.halign, t.pos = 90.0, "center", (d.line_pos - 0.625, (d.p1[1] + d.p2[1]) / 2)
+    need({"1.14"}, prim_check(mut(label_back_over_tick, D2), sp2), "prim_riser_height_label_back_over_tick")
+    def b_label_centered_over_ticks(Dm):
+        d = [x for x in Dm.dims if x.kind == "h" and x.view == "section"][0]
+        t = [p for p in Dm.prims if p.tag == "dim_single_text" and p.s == "250"][0]
+        t.halign, t.pos = "center", ((d.p1[0] + d.p2[0]) / 2, d.line_pos + 0.625)
+    need({"1.14"}, prim_check(mut(b_label_centered_over_ticks, D3), sp3), "prim_b_label_centered_over_ticks_1:50")
     # a spec that disagrees with the (correct) drawing must fail too: b changed in the spec only
     sp_b = dict(sp1, b=260)
     need({"1.2", "1.3", "1.4"}, prim_check(D1, sp_b), "spec_b_260_vs_drawing_b_250")
