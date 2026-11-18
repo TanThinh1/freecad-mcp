@@ -30,6 +30,23 @@ LAYER_AXIS, LAYER_BUBBLE, LAYER_COLUMN = "TRUC", "TRUC-KYHIEU", "COT"
 LAYER_DIM, LAYER_TEXT, LAYER_FRAME, LAYER_THIN = "KICH-THUOC", "CHU", "KHUNG-TEN", "NET-MANH"
 
 
+def est_width(s: str, size: float, bold: bool = False) -> float:
+    """Conservative Arial width estimate in mm for em size `size` (measured in S1: 25 bold caps+spaces at 5 mm = 76 mm; estimate ~79)."""
+    w = 0.0
+    for ch in s:
+        if ch == " ":
+            w += 0.28
+        elif ch.isdigit():
+            w += 0.556
+        elif ch.isupper():
+            w += 0.72 if bold else 0.68
+        elif ch.isalpha():
+            w += 0.56 if bold else 0.52
+        else:
+            w += 0.35
+    return w * size
+
+
 class ProfileError(Exception):
     pass
 

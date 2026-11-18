@@ -57,6 +57,40 @@ def pick_scale(bbox_mm, dims_margin_mm=15.0, gap_mm=5.0, scales=SCALES) -> int:
     return layout_scale(bbox_mm, dims_margin_mm, gap_mm, scales)["scale"]
 
 
+class ScaleReject(Exception):
+    """Raised by an extent function when a scale is unusable for a reason other than size (e.g. step numbers would overlap)."""
+
+
+def fit_scale(extent_at, gap_mm=5.0, scales=SCALES, only=None):
+    """Same L-shaped drawing area, but the annotated extents come from the real layout: extent_at(scale) -> (paper_w, paper_h).
+
+    only: a single scale to test (explicit ty_le). Returns dict(scale, band, region, paper_w, paper_h, reason); ValueError if nothing fits.
+    No rotation of the drawing is attempted.
+    """
+    tried = []
+    for s in ([only] if only else sorted(scales)):
+        try:
+            pw, ph = extent_at(s)
+        except ScaleReject as e:
+            tried.append(f"1:{s} bị loại: {e}")
+            continue
+        pw, ph = pw + 2 * gap_mm, ph + 2 * gap_mm
+        if pw <= FRAME_W and ph <= FRAME_H - TB_H:
+            band, region = "top", BAND_TOP
+        elif pw <= FRAME_W - TB_W and ph <= FRAME_H:
+            band, region = "left", BAND_LEFT
+        else:
+            tried.append(f"1:{s} cần {pw:.0f}×{ph:.0f} mm")
+            continue
+        why = (f"1:{s} " + ("(người dùng chọn) " if only else f"là tỷ lệ lớn nhất trong dãy {'/'.join(map(str, scales))} mà bố cục tổng hợp ") +
+               f"({pw:.0f}×{ph:.0f} mm gồm cả kích thước và tên hình) nằm trong " +
+               ("dải trên 390×212" if band == "top" else "dải trái 210×277") + " mm của vùng vẽ (khung 390×277 trừ góc khung tên 180×65)")
+        if tried:
+            why += "; không vừa: " + ", ".join(tried)
+        return dict(scale=s, band=band, region=region, paper_w=pw, paper_h=ph, reason=why)
+    raise ValueError("Không vừa vùng vẽ A3 (khung 390×277 trừ góc khung tên 180×65): " + ", ".join(tried) + ". Không tự xoay hình.")
+
+
 if __name__ == "__main__":
     assert pick_scale((3000, 1500)) == 20
     r = layout_scale((15000, 20000))

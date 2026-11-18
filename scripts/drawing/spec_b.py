@@ -96,6 +96,67 @@ def parse_section(text):
     return None
 
 
+def parse_scale(ty_le, errors):
+    """-> (ty_le, scale or None). "auto" or "1:N" with N in SCALES."""
+    if ty_le == "auto":
+        return ty_le, None
+    m = re.fullmatch(r"1\s*:\s*(\d+)", ty_le) if isinstance(ty_le, str) else None
+    if not m or int(m.group(1)) not in SCALES:
+        errors.append(f"ty_le = {ty_le!r} không hợp lệ. Dùng \"auto\" hoặc một trong " + ", ".join(f"1:{s}" for s in SCALES) + ".")
+        return ty_le, None
+    return ty_le, int(m.group(1))
+
+
+def parse_ten(ten, errors):
+    if not isinstance(ten, str) or not _NAME.fullmatch(ten):
+        errors.append(f"ten = {ten!r}: chỉ dùng chữ cái, số, '_' và '-' (tối đa 64 ký tự); đây là tên thư mục và tệp đầu ra.")
+    return ten
+
+
+def parse_khung_ten(kt_in, errors) -> dict:
+    """Title-block metadata (cells 1-7, 8-14, 15). Strings only, no control characters; date dd/mm/yyyy; at most 7 signature rows."""
+    kt: dict = {}
+    if not isinstance(kt_in, dict):
+        errors.append(f"khung_ten = {kt_in!r} phải là đối tượng JSON.")
+        return kt
+    for k in TEXT_FIELDS:
+        kt[k] = _text(kt_in.get(k), f"khung_ten.{k}", errors)
+    ngay = kt.get("ngay", "")
+    if ngay:
+        try:
+            datetime.datetime.strptime(ngay, "%d/%m/%Y")
+        except ValueError:
+            errors.append(f"khung_ten.ngay = {ngay!r} phải là ngày thật dạng dd/mm/yyyy.")
+    ky_in = kt_in.get("ky") or []
+    ky = []
+    if not isinstance(ky_in, list) or not all(isinstance(r, dict) for r in ky_in):
+        errors.append(f"khung_ten.ky = {ky_in!r} phải là danh sách các đối tượng {{chuc_danh, ho_ten}}.")
+    else:
+        if len(ky_in) > 7:
+            errors.append(f"khung_ten.ky có {len(ky_in)} dòng; khung tên chỉ có 7 hàng (ô 8-14).")
+        for i, r in enumerate(ky_in):
+            ky.append(dict(chuc_danh=_text(r.get("chuc_danh"), f"khung_ten.ky[{i}].chuc_danh", errors),
+                           ho_ten=_text(r.get("ho_ten"), f"khung_ten.ky[{i}].ho_ten", errors)))
+    kt["ky"] = ky
+    return kt
+
+
+def parse_params(ts, defaults: dict, errors) -> dict:
+    """Layout parameters: only known keys, positive finite numbers."""
+    params = dict(defaults)
+    if not isinstance(ts, dict):
+        errors.append(f"tham_so = {ts!r} phải là đối tượng JSON.")
+        return params
+    for k, v in ts.items():
+        if k not in defaults:
+            errors.append(f"tham_so.{k} không phải tham số được hỗ trợ ({', '.join(defaults)}).")
+        elif isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0:
+            errors.append(f"tham_so.{k} = {v!r} phải là số dương hữu hạn.")
+        else:
+            params[k] = float(v)
+    return params
+
+
 def validate(spec) -> dict:
     """Return a normalised copy of the spec or raise SpecError with every problem found."""
     if not isinstance(spec, dict):
@@ -123,53 +184,10 @@ def validate(spec) -> dict:
             errors.append(f"buoc_cot = {buoc:g} mm không lớn hơn bề rộng cột b = {sec['b']:g} mm: các cột chồng lên nhau.")
         if nhip and nhip <= sec["h"]:
             errors.append(f"nhip = {nhip:g} mm không lớn hơn chiều cao tiết diện cột h = {sec['h']:g} mm.")
-    ty_le = spec.get("ty_le", "auto")
-    scale = None
-    if ty_le != "auto":
-        m = re.fullmatch(r"1\s*:\s*(\d+)", ty_le) if isinstance(ty_le, str) else None
-        if not m or int(m.group(1)) not in SCALES:
-            errors.append(f"ty_le = {ty_le!r} không hợp lệ. Dùng \"auto\" hoặc một trong " + ", ".join(f"1:{s}" for s in SCALES) + ".")
-        else:
-            scale = int(m.group(1))
-    ten = spec.get("ten")
-    if not isinstance(ten, str) or not _NAME.fullmatch(ten):
-        errors.append(f"ten = {ten!r}: chỉ dùng chữ cái, số, '_' và '-' (tối đa 64 ký tự); đây là tên thư mục và tệp đầu ra.")
-    kt_in = spec.get("khung_ten") or {}
-    kt: dict = {}
-    if not isinstance(kt_in, dict):
-        errors.append(f"khung_ten = {kt_in!r} phải là đối tượng JSON.")
-    else:
-        for k in TEXT_FIELDS:
-            kt[k] = _text(kt_in.get(k), f"khung_ten.{k}", errors)
-        ngay = kt.get("ngay", "")
-        if ngay:
-            try:
-                datetime.datetime.strptime(ngay, "%d/%m/%Y")
-            except ValueError:
-                errors.append(f"khung_ten.ngay = {ngay!r} phải là ngày thật dạng dd/mm/yyyy.")
-        ky_in = kt_in.get("ky") or []
-        ky = []
-        if not isinstance(ky_in, list) or not all(isinstance(r, dict) for r in ky_in):
-            errors.append(f"khung_ten.ky = {ky_in!r} phải là danh sách các đối tượng {{chuc_danh, ho_ten}}.")
-        else:
-            if len(ky_in) > 7:
-                errors.append(f"khung_ten.ky có {len(ky_in)} dòng; khung tên chỉ có 7 hàng (ô 8-14).")
-            for i, r in enumerate(ky_in):
-                ky.append(dict(chuc_danh=_text(r.get("chuc_danh"), f"khung_ten.ky[{i}].chuc_danh", errors),
-                               ho_ten=_text(r.get("ho_ten"), f"khung_ten.ky[{i}].ho_ten", errors)))
-        kt["ky"] = ky
-    params = dict(DEFAULT_PARAMS)
-    ts = spec.get("tham_so") or {}
-    if not isinstance(ts, dict):
-        errors.append(f"tham_so = {ts!r} phải là đối tượng JSON.")
-    else:
-        for k, v in ts.items():
-            if k not in DEFAULT_PARAMS:
-                errors.append(f"tham_so.{k} không phải tham số được hỗ trợ ({', '.join(DEFAULT_PARAMS)}).")
-            elif isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0:
-                errors.append(f"tham_so.{k} = {v!r} phải là số dương hữu hạn.")
-            else:
-                params[k] = float(v)
+    ty_le, scale = parse_scale(spec.get("ty_le", "auto"), errors)
+    ten = parse_ten(spec.get("ten"), errors)
+    kt = parse_khung_ten(spec.get("khung_ten") or {}, errors)
+    params = parse_params(spec.get("tham_so") or {}, DEFAULT_PARAMS, errors)
     if errors:
         raise SpecError(errors)
     return dict(loai="B", ten=ten, nhip=nhip, dai_nha=dai, buoc_cot=buoc, so_truc_doc=N, section=sec, ty_le=ty_le, scale=scale, khung_ten=kt, params=params)

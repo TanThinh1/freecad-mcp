@@ -13,6 +13,7 @@ from xml.sax.saxutils import escape
 
 from primitives import Line, Rect, Text
 from spec_b import SpecError
+from tcvn import est_width  # noqa: F401  (re-exported: verify.py uses TBK.est_width)
 from tcvn import (ARIAL_CAP, FRAME_X0, FRAME_X1, FRAME_Y0, FRAME_Y1, LAYER_FRAME, LAYER_TEXT, LAYER_THIN, SHEET_H, SHEET_W, TB_H, TB_W, TB_X0, TB_Y0, W_FRAME,
                   W_THIN)
 
@@ -42,23 +43,6 @@ for _k in range(7):
     FIELDS[f"row{_k + 1}_name"] = (None, 75, top + 4.8, 2.5, False, 27)
 CAPTIONS = [("3", 1.5, 3.4, "Tên bản vẽ"), ("7", 1.5, 3.4, "Tỷ lệ"), ("5", 1.5, 3.4, "Loại hồ sơ"), ("4", 1.5, 3.4, "Số hiệu")]
 CAP_SIZE = 2.5
-
-
-def est_width(s: str, size: float, bold: bool = False) -> float:
-    """Conservative Arial width estimate in mm (measured S1: 25 bold caps+spaces at 5 mm = 76 mm; estimate gives ~79)."""
-    w = 0.0
-    for ch in s:
-        if ch == " ":
-            w += 0.28
-        elif ch.isdigit():
-            w += 0.556
-        elif ch.isupper():
-            w += 0.72 if bold else 0.68
-        elif ch.isalpha():
-            w += 0.56 if bold else 0.52
-        else:
-            w += 0.35
-    return w * size
 
 
 def _split(text, size, bold, width, max_lines, what):
