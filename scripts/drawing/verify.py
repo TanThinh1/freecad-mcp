@@ -7,6 +7,7 @@ Geometry checks match EVERY primitive (position, size, line weight, dash) agains
 from __future__ import annotations
 
 import collections
+import decimal
 import json
 import math
 import os
@@ -51,6 +52,35 @@ def _len(p):
 
 def close(a, b, tol):
     return abs(a - b) <= tol
+
+
+_NUM = r"(\d+(?:,\d+)?)"
+_EQ = re.compile(_NUM + r"\s*[x×]\s*" + _NUM + r"\s*=\s*" + _NUM)
+_APPROX = re.compile(_NUM + r"\s*/\s*" + _NUM + r"\s*≈\s*" + _NUM)
+
+
+def check_expressions(C: "Checks", texts, group: int, cid: str, where: str):
+    """Every arithmetic expression printed on the drawing must be true for the DISPLAYED numbers: 'a x b = c' exactly (decimal arithmetic),
+    'a/b ≈ c' after rounding a/b to the number of decimals shown in c (half up). A text with '=' or '≈' that is not one of these forms fails."""
+    D = decimal.Decimal
+    bad, n = [], 0
+    for t in texts:
+        found = False
+        for a, b, c in _EQ.findall(t):
+            found = True
+            n += 1
+            if D(a.replace(",", ".")) * D(b.replace(",", ".")) != D(c.replace(",", ".")):
+                bad.append(f"{t!r}: {a} x {b} = {D(a.replace(',', '.')) * D(b.replace(',', '.')):f} ≠ {c}")
+        for a, b, c in _APPROX.findall(t):
+            found = True
+            n += 1
+            cd = D(c.replace(",", "."))
+            q = (D(a.replace(",", ".")) / D(b.replace(",", "."))).quantize(D(1).scaleb(cd.as_tuple().exponent), rounding=decimal.ROUND_HALF_UP)
+            if q != cd:
+                bad.append(f"{t!r}: {a}/{b} = {q:f} khi làm tròn đúng số chữ số thập phân hiển thị, ≠ {c}")
+        if not found and ("=" in t or "≈" in t):
+            bad.append(f"{t!r}: biểu thức không đọc được")
+    C.add(group, cid, f"{where}: mọi biểu thức số học in trên bản vẽ (a x b = c, a/b ≈ c) đúng với số hiển thị", not bad, f"{n} biểu thức đã kiểm" + (f"; SAI: {bad[:3]}" if bad else ""))
 
 
 def greedy_match(expected, got, near):
@@ -112,6 +142,7 @@ def check_primitives_b(C: Checks, D, sp):
     labels = sorted(p.s for p in D.by_tag("bubble_text"))
     wantl = sorted([str(i + 1) for i in range(N)] + ["A", "B"])
     C.add(1, "1.13", "ký hiệu trục: 1..N và A, B", labels == wantl, f"{len(labels)} vòng: {', '.join(wantl)}")
+    check_expressions(C, [p.s for p in D.prims if isinstance(p, Text)], 1, "1.20", "chữ trên bản vẽ")
 
 
 check_primitives = check_primitives_b      # backwards-compatible name (tests)
@@ -223,6 +254,7 @@ def check_dxf(C: Checks, D, sp, profile, dxf: str, do_fc: bool):
     else:
         import verify_a
         verify_a.check_dxf_a(C, D, sp, dx)
+    check_expressions(C, [t for _, t in dx["texts"]], 2, "2.12", "chữ trong DXF")
     gd = dxf_geometry_diff(dx, D)
     C.add(2, "2.9", "mọi primitive có entity DXF đúng vị trí/kích thước (±0,001 mm thật)", all(a == t for a, t in gd.values()) and sum(t for _, t in gd.values()) == len(D.prims),
           "; ".join(f"{k} {a}/{t}" for k, (a, t) in sorted(gd.items())))
@@ -396,13 +428,13 @@ def check_pdf(C: Checks, D, sp, dx: dict, pdf: str, png: str | None, profile: di
     C.add(5, "5.5", "mỗi chuỗi chữ (kể cả khung tên) có nét chữ đúng vị trí; số có ≥ 3 chữ số đúng độ rộng nét chữ", ok == ntext and not wr,
           f"{ok}/{ntext} chuỗi có nét chữ tại vị trí; độ rộng sai: {wr[:3]}; không thấy: {bad[:3]}. Giá trị từng chữ số trong PDF không giải mã được (suy luận: cùng nguồn primitives; 5.1 xác nhận chiều dài đường kích thước)")
     # every dimension must exist in the PDF as a dimension line of the exact real length, and its label text must be in the DXF
-    vals = [d.value for d in D.dims]
+    vals = [d.value / D.view_scale(d.view) for d in D.dims]         # paper length of each dimension line (view scale)
     dim_lines = [p for p in paths if _straight(p) and close(p["lw"], 0.25, 0.03) and not p["dash"] and (close(p["bb"][0], p["bb"][2], 0.01) or close(p["bb"][1], p["bb"][3], 0.01))]
-    n_m, bad_v = greedy_match(vals, dim_lines, lambda v, p: close(max(p["bb"][2] - p["bb"][0], p["bb"][3] - p["bb"][1]) * s, v, TOL_PDF * s))
+    n_m, bad_v = greedy_match(vals, dim_lines, lambda v, p: close(max(p["bb"][2] - p["bb"][0], p["bb"][3] - p["bb"][1]), v, TOL_PDF))
     dxt = collections.Counter(t for lay, t in dx["texts"] if lay == LAYER_DIM)
     want_t = collections.Counter(p.s for p in D.prims if isinstance(p, Text) and p.tag.startswith("dim_") and p.tag.endswith("_text"))
     C.add(5, "5.6", "mỗi kích thước có đường kích thước PDF dài đúng (± 0,06 mm × tỷ lệ) và chữ tương ứng trong DXF", bool(vals) and n_m == len(vals) and dxt == want_t,
-          f"{n_m}/{len(vals)} đường khớp (giá trị {sorted(set(round(v, 2) for v in vals))}); chữ DXF {dict(dxt)}")
+          f"{n_m}/{len(vals)} đường khớp (giá trị thật {sorted(set(round(d.value, 2) for d in D.dims))}); chữ DXF {dict(dxt)}")
     return a
 
 

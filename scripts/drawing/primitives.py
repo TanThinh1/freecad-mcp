@@ -60,6 +60,7 @@ class Dim:
     role: str = "chain"   # chain | overall | single
     ext_lines: bool = True
     text: str | None = None   # explicit label (e.g. "183,3" or "19 x 250 = 4750"); default = fmt_value(value)
+    view: str = ""            # view the dimension belongs to when a sheet carries views at different scales ("" = the sheet scale)
 
 
 def fmt_value(v: float) -> str:
@@ -119,6 +120,10 @@ class Drawing:
 
     def by_tag(self, tag):
         return [p for p in self.prims if p.tag == tag]
+
+    def view_scale(self, view: str = "") -> int:
+        """Drawing scale (denominator) of a view; meta["view_scales"] = {view: scale}; views not listed use the sheet scale."""
+        return self.meta.get("view_scales", {}).get(view, self.scale)
 
 
 def cap_to_em(h: float) -> float:

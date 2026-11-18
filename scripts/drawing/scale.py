@@ -91,6 +91,56 @@ def fit_scale(extent_at, gap_mm=5.0, scales=SCALES, only=None):
     raise ValueError("Không vừa vùng vẽ A3 (khung 390×277 trừ góc khung tên 180×65): " + ", ".join(tried) + ". Không tự xoay hình.")
 
 
+def _overlaps_tb(r, tx, ty, gap):
+    """True when rect r (x0, y0, x1, y1) translated by (tx, ty) and grown by gap overlaps the title-block corner (open test: touching is fine)."""
+    return (r[2] + tx + gap > TB_X0 and r[0] + tx - gap < FRAME_X1 and r[1] + ty - gap < TB_Y1 and r[3] + ty + gap > FRAME_Y0)
+
+
+def _clearance(rects, tx, ty):
+    """Smallest distance (mm) from any rect to the frame edges or to the title-block corner (negative = overlap)."""
+    c = 1e9
+    for r in rects:
+        c = min(c, r[0] + tx - FRAME_X0, FRAME_X1 - (r[2] + tx), r[1] + ty - FRAME_Y0, FRAME_Y1 - (r[3] + ty), max(TB_X0 - (r[2] + tx), (r[1] + ty) - TB_Y1))
+    return c
+
+
+def place_rects(rects, gap_mm=5.0):
+    """Translate a group of rigid rectangles (x0, y0, x1, y1; relative positions fixed) into the L-shaped drawing area.
+
+    Every rectangle must keep gap_mm to the frame and to the title-block corner. Returns the translation (tx, ty) with the largest
+    minimum clearance (ties: closest to the middle of the frame), or None if the group does not fit. Never rotates anything.
+    """
+    ux0, uy0 = min(r[0] for r in rects), min(r[1] for r in rects)
+    ux1, uy1 = max(r[2] for r in rects), max(r[3] for r in rects)
+    tx_lo, tx_hi = FRAME_X0 + gap_mm - ux0, FRAME_X1 - gap_mm - ux1
+    ty_lo, ty_hi = FRAME_Y0 + gap_mm - uy0, FRAME_Y1 - gap_mm - uy1
+    if tx_lo > tx_hi + 1e-9 or ty_lo > ty_hi + 1e-9:
+        return None
+    xs, ys = {tx_lo, tx_hi}, {ty_lo, ty_hi}
+    for r in rects:
+        xs.add(TB_X0 - gap_mm - r[2])
+        ys.add(TB_Y1 + gap_mm - r[1])
+    cand = [(x, y) for x in xs for y in ys if tx_lo - 1e-9 <= x <= tx_hi + 1e-9 and ty_lo - 1e-9 <= y <= ty_hi + 1e-9
+            and not any(_overlaps_tb(r, x, y, gap_mm - 1e-9) for r in rects)]
+    if not cand:
+        return None
+    cx, cy = (FRAME_X0 + FRAME_X1) / 2, (FRAME_Y0 + FRAME_Y1) / 2
+    best, best_key = None, None
+    x = tx_lo
+    nx = max(1, int((tx_hi - tx_lo) / 1.0))
+    ny = max(1, int((ty_hi - ty_lo) / 1.0))
+    for i in range(nx + 1):
+        x = tx_lo + (tx_hi - tx_lo) * i / nx
+        for j in range(ny + 1):
+            y = ty_lo + (ty_hi - ty_lo) * j / ny
+            if any(_overlaps_tb(r, x, y, gap_mm - 1e-9) for r in rects):
+                continue
+            key = (round(_clearance(rects, x, y), 6), -(abs((ux0 + ux1) / 2 + x - cx) + abs((uy0 + uy1) / 2 + y - cy)))
+            if best_key is None or key > best_key:
+                best, best_key = (x, y), key
+    return best or cand[0]
+
+
 if __name__ == "__main__":
     assert pick_scale((3000, 1500)) == 20
     r = layout_scale((15000, 20000))
