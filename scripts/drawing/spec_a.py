@@ -20,6 +20,7 @@ DEFAULT_PARAMS_A = dict(DEFAULT_PARAMS)
 DEFAULT_PARAMS_A.update(
     doan_san=12.0,            # length of the floor stub drawn on each side of the section (paper mm)
     cao_chu_so_bac=2.5,       # step numbers in the plan
+    khe_so_bac=1.5,           # minimum clear gap between a step number and any line (paper mm); numbers move above the plan when the step pitch is too small
     nguong_2hb_min=600.0,     # soft rule of thumb (NOT a verified TCVN clause): 2h + b normally 600..630 mm (real mm)
     nguong_2hb_max=630.0,
     khoang_giua_hinh=8.0,     # clear gap between the section block and the plan block (paper mm)

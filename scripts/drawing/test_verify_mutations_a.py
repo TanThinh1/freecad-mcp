@@ -261,6 +261,23 @@ def main():
         t = [p for p in Dm.prims if p.tag == "dam_label"][0]
         t.pos = (t.pos[0], t.pos[1] + 12.0)
     need({"1.17", "1.23"}, prim_check(mut(dam_label_on_stair), sp1), "prim_stringer_label_moved_onto_the_stair_lines")
+    # (11) item 4: clear gap between step numbers and lines
+    def steps_back_inside_cells(Dm):                  # the old layout: numbers between the tread lines (0.4-0.9 mm from them at 1:50)
+        r_ = [p for p in Dm.prims if p.tag == "plan_outline"][0]
+        for p in Dm.prims:
+            if p.tag == "step_no":
+                p.pos = (p.pos[0], r_.p0[1] + (r_.p1[1] - r_.p0[1]) * 0.58)
+    need({"1.22"}, prim_check(mut(steps_back_inside_cells), sp1), "prim_step_numbers_back_inside_cells_at_1:50")
+    def steps_0p5_above(Dm):
+        r_ = [p for p in Dm.prims if p.tag == "plan_outline"][0]
+        for p in Dm.prims:
+            if p.tag == "step_no":
+                p.pos = (p.pos[0], r_.p1[1] + 0.5)
+    need({"1.22"}, prim_check(mut(steps_0p5_above), sp1), "prim_step_numbers_0.5mm_above_the_plan_edge")
+    def one_number_shifted_into_tread_line(Dm):
+        t = [p for p in Dm.prims if p.tag == "step_no" and p.s == "10"][0]
+        t.pos = (t.pos[0] + 2.2, t.pos[1])
+    need({"1.5", "1.22"}, prim_check(mut(one_number_shifted_into_tread_line), sp1), "prim_step_number_10_shifted_2.2mm_towards_a_tread_line")
     # a spec that disagrees with the (correct) drawing must fail too: b changed in the spec only
     sp_b = dict(sp1, b=260)
     need({"1.2", "1.3", "1.4"}, prim_check(D1, sp_b), "spec_b_260_vs_drawing_b_250")

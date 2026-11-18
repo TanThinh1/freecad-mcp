@@ -12,7 +12,7 @@ from primitives import Circle, Line, Rect, Text, expand_dim, fmt_dec, prim_bbox
 from scale import SCALES
 from tcvn import SHEETS
 from readers import f
-from verify import Checks, check_expressions, close, greedy_match
+from verify import Checks, check_expressions, close, greedy_match, text_min_gap
 
 TOL = 1e-6
 TOL_DXF = 1e-3
@@ -121,6 +121,15 @@ def check_primitives_a(C: Checks, D, sp):
     check_dim_text_clear(C, D)
     check_extras_a(C, D, sp)
     check_dam_label(C, D, sp)
+    segs = [(g.p1, g.p2) for g in D.prims if isinstance(g, Line) and not g.sheet and not g.tag.startswith("dim_")]
+    for r_ in (p for p in D.prims if isinstance(p, Rect) and not p.sheet):
+        (ax_, ay_), (bx_, by_) = r_.p0, r_.p1
+        segs += [((ax_, ay_), (bx_, ay_)), ((bx_, ay_), (bx_, by_)), ((bx_, by_), (ax_, by_)), ((ax_, by_), (ax_, ay_))]
+    steps_ = [t for t in D.prims if isinstance(t, Text) and t.tag == "step_no"]
+    gmin, gtxt = text_min_gap(steps_, segs)
+    min_gap = D.info["params"]["khe_so_bac"]
+    C.add(1, "1.22", f"khoảng hở giữa chữ số bậc và mọi nét ≥ {min_gap:g} mm giấy (khung chữ ước lượng nên thiên về an toàn)", bool(steps_) and gmin >= min_gap - 1e-9,
+          f"{len(steps_)} số bậc; khoảng hở nhỏ nhất {gmin:.2f} mm (số {gtxt})")
     st_l = [(p.tag, p.layer) for p in D.prims if p.tag.startswith("stringer_")]
     wrong = [x for x in st_l if x[1] != "NET-CHINH"] + [(p.tag, p.layer) for p in D.prims if p.layer in ("KEO", "COT")]
     C.add(1, "1.21", "dầm cốn (stringer_*) nằm trên layer NET-CHINH (nét cơ bản, thấy); không có nét nào của thang trên layer KEO (kèo) hoặc COT (cột)", bool(st_l) and not wrong,
@@ -263,14 +272,14 @@ def check_extras_a(C: Checks, D, sp):
     if outl:
         r_ = outl[0]
         x0, y0, x1, y1 = min(r_.p0[0], r_.p1[0]), min(r_.p0[1], r_.p1[1]), max(r_.p0[0], r_.p1[0]), max(r_.p0[1], r_.p1[1])
-        inside = all(x0 <= t.pos[0] <= x1 and y0 <= t.pos[1] and t.pos[1] + t.h <= y1 for t in by("step_no"))
+        inside = all(x0 <= t.pos[0] <= x1 and ((y0 <= t.pos[1] and t.pos[1] + t.h <= y1) or 1.4 <= t.pos[1] - y1 <= 5.0) for t in by("step_no"))          # inside a cell, or just above the plan
     over = []
     for t in texts:
         if t.tag in ("step_no", "cut_label") or t.tag.startswith("dim_"):
             continue
         if any(_hits_text(t, g, v_hi=1.45 if any(ord(c) > 127 for c in t.s) else 1.05) for g in lines):
             over.append(t.s)
-    C.add(1, "1.17", "chữ: cao ≥ 2,0 mm giấy; số bậc nằm trong hình chữ nhật mặt bằng; chữ (trừ số bậc/kích thước) không đè lên nét nào", not small and inside and not over,
+    C.add(1, "1.17", "chữ: cao ≥ 2,0 mm giấy; số bậc nằm trong ô bậc hoặc ngay phía trên mặt bằng; chữ (trừ số bậc/kích thước) không đè lên nét nào", not small and inside and not over,
           f"{len(texts)} chữ; quá nhỏ: {small[:3]}; số bậc trong hình: {inside}; chữ đè nét: {over[:3]}")
     # ---- 1.18
     X = expected_texts(sp)

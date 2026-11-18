@@ -183,8 +183,13 @@ def plan_block(sp: dict, s: int):
     hn = P["cao_chu_so_bac"]
     if X(b) < est_width(str(n - 1), cap_to_em(hn)) + 0.8:
         raise ScaleReject(f"số bậc chồng lên nhau (bước bậc {X(b):.1f} mm trên giấy < chữ số)")
+    # numbers sit inside the cells when the tread-line pitch leaves >= khe_so_bac on both sides of the widest number; otherwise (1:50 and coarser)
+    # they are centred ABOVE the plan, where no tread line passes (the smallest text size of the system, 2.5 mm, cannot be reduced)
+    gap_n = P["khe_so_bac"]
+    inside_n = X(b) >= est_width(str(n - 1), cap_to_em(hn)) + 2 * gap_n
+    y_num = wk * 0.58 if inside_n else ytop + gap_n + 0.25
     for i in range(1, n):
-        add(Text(layer=LAYER_TEXT, tag="step_no", s=str(i), pos=(X((i - 0.5) * b), wk * 0.58), h=hn, halign="center"))
+        add(Text(layer=LAYER_TEXT, tag="step_no", s=str(i), pos=(X((i - 0.5) * b), y_num), h=hn, halign="center"))
     ya = wk * 0.25
     xa0, xa1 = X(0.5 * b), X(L) - X(0.5 * b)
     add(Line(layer=LAYER_THIN, tag="plan_arrow", p1=(xa0, ya), p2=(xa1, ya)))

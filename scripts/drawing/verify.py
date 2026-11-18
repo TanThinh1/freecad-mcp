@@ -86,6 +86,50 @@ def check_expressions(C: "Checks", texts, group: int, cid: str, where: str):
     C.add(group, cid, f"{where}: mọi biểu thức số học in trên bản vẽ (a x b = c, a/b ≈ c) đúng với số hiển thị", not bad, f"{n} biểu thức đã kiểm" + (f"; SAI: {bad[:3]}" if bad else ""))
 
 
+def _seg_rect_gap(a, b, rect):
+    """Distance between segment a-b and an axis-aligned rectangle (x0, y0, x1, y1); 0 when they touch or cross."""
+    x0, y0, x1, y1 = rect
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    t0, t1 = 0.0, 1.0
+    for p, q in ((-dx, a[0] - x0), (dx, x1 - a[0]), (-dy, a[1] - y0), (dy, y1 - a[1])):
+        if p == 0:
+            if q < 0:
+                t0, t1 = 1.0, 0.0
+                break
+        else:
+            r = q / p
+            if p < 0:
+                t0 = max(t0, r)
+            else:
+                t1 = min(t1, r)
+    if t0 <= t1:
+        return 0.0
+
+    def pt_rect(px, py):
+        return math.hypot(max(x0 - px, 0.0, px - x1), max(y0 - py, 0.0, py - y1))
+
+    def pt_seg(px, py):
+        L2 = dx * dx + dy * dy
+        t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((px - a[0]) * dx + (py - a[1]) * dy) / L2))
+        return math.hypot(px - (a[0] + t * dx), py - (a[1] + t * dy))
+
+    return min(pt_rect(*a), pt_rect(*b), pt_seg(x0, y0), pt_seg(x1, y0), pt_seg(x1, y1), pt_seg(x0, y1))
+
+
+def text_min_gap(texts, segments):
+    """Smallest clear distance (mm) between the (conservative, est_width based) box of each horizontal text and any segment [(p, q)]. Returns (gap, text)."""
+    best = (1e9, None)
+    for t in texts:
+        w = TBK.est_width(t.s, cap_to_em(t.h), t.bold)
+        x0, x1 = {"left": (0.0, w), "center": (-w / 2, w / 2), "right": (-w, 0.0)}[t.halign]
+        rect = (t.pos[0] + x0, t.pos[1] - 0.05 * t.h, t.pos[0] + x1, t.pos[1] + t.h)
+        for p, q in segments:
+            g = _seg_rect_gap(p, q, rect)
+            if g < best[0]:
+                best = (g, t.s)
+    return best
+
+
 def greedy_match(expected, got, near):
     """expected/got: lists; near(e, g) -> bool. One-to-one greedy matching. Returns (n_matched, unmatched expected)."""
     used, bad = set(), []
