@@ -22,7 +22,9 @@ EXAMPLE = {"thang": "a1_3600x20.json", "luoi_cot": "b2_12000x30000.json", "khung
 MAX_SPEC_BYTES = 20000
 
 KHUNG_TEN = ("khung_ten (tùy chọn): {don_vi_tk, cong_trinh, chu_dau_tu, ten_ban_ve, ky_hieu_ban_ve, loai_ho_so, ngay (dd/mm/yyyy), o15, "
-             "ky: [{chuc_danh, ho_ten}] tối đa 7 dòng}. Chuỗi dài hơn ô khung tên sẽ báo lỗi (không tự thu nhỏ chữ); dùng dấu | để ngắt dòng.")
+             "ky: [{chuc_danh, ho_ten}], chu_tri / kiem_tra / thiet_ke (true = chỉ in nhãn chức danh ở ô 8-14; chuỗi = họ tên do người dùng cung cấp; không có = để trống, "
+             "hệ thống KHÔNG tự bịa tên người); tối đa 7 dòng. ky_hieu_ban_ve mặc định theo loại (thang KC-03, luoi_cot KC-01, khung_ngang KC-02). "
+             "Chuỗi dài hơn ô khung tên sẽ báo lỗi (không tự thu nhỏ chữ); dùng dấu | để ngắt dòng.")
 COMMON_RULES = [
     "Mọi kích thước tính bằng mm. nhip, cao_cot, cao_tang... phải là số nguyên mm dương (không làm tròn âm thầm).",
     "ty_le: \"auto\" (mặc định, chọn tỷ lệ lớn nhất còn vừa khổ A3) hoặc 1:20, 1:25, 1:50, 1:100, 1:200, 1:500.",

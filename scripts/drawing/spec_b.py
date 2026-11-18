@@ -39,6 +39,7 @@ DEFAULT_PARAMS = dict(
 SECTION_ERR = "tiet_dien_cot = %r không đọc được. Dạng hợp lệ: H300x150x6x9 (h x b x tw x tf, mm) hoặc hộp 100x50x2 (h x b x t, mm)."
 _CTRL = re.compile("[\x00-\x1f\x7f\ud800-\udfff]")
 _NAME = re.compile(r"[A-Za-z0-9_\-]{1,64}")
+ROLE_KEYS = (("chu_tri", "Chủ trì"), ("kiem_tra", "Kiểm tra"), ("thiet_ke", "Thiết kế"))
 TEXT_FIELDS = ("don_vi_tk", "cong_trinh", "chu_dau_tu", "ten_ban_ve", "ky_hieu_ban_ve", "loai_ho_so", "ngay", "o15")
 
 
@@ -129,15 +130,26 @@ def parse_khung_ten(kt_in, errors) -> dict:
             errors.append(f"khung_ten.ngay = {ngay!r} phải là ngày thật dạng dd/mm/yyyy.")
     ky_in = kt_in.get("ky") or []
     ky = []
+    roles = []             # shortcut keys chu_tri / kiem_tra / thiet_ke: role label printed in cells 8-14, the name only when the spec gives one (never invented)
+    for key, label in ROLE_KEYS:
+        v = kt_in.get(key)
+        if v is None or v is False:
+            continue
+        if v is True:
+            roles.append(dict(chuc_danh=label, ho_ten=""))
+        elif isinstance(v, str):
+            roles.append(dict(chuc_danh=label, ho_ten=_text(v, f"khung_ten.{key}", errors)))
+        else:
+            errors.append(f"khung_ten.{key} = {v!r} phải là true (chỉ ghi nhãn chức danh) hoặc chuỗi họ tên.")
     if not isinstance(ky_in, list) or not all(isinstance(r, dict) for r in ky_in):
         errors.append(f"khung_ten.ky = {ky_in!r} phải là danh sách các đối tượng {{chuc_danh, ho_ten}}.")
     else:
-        if len(ky_in) > 7:
-            errors.append(f"khung_ten.ky có {len(ky_in)} dòng; khung tên chỉ có 7 hàng (ô 8-14).")
+        if len(ky_in) + len(roles) > 7:
+            errors.append(f"khung_ten.ky ({len(ky_in)} dòng) cùng các nhãn chu_tri/kiem_tra/thiet_ke ({len(roles)} dòng) vượt 7 hàng của khung tên (ô 8-14).")
         for i, r in enumerate(ky_in):
             ky.append(dict(chuc_danh=_text(r.get("chuc_danh"), f"khung_ten.ky[{i}].chuc_danh", errors),
                            ho_ten=_text(r.get("ho_ten"), f"khung_ten.ky[{i}].ho_ten", errors)))
-    kt["ky"] = ky
+    kt["ky"] = roles + ky
     return kt
 
 

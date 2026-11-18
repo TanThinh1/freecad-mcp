@@ -12,6 +12,9 @@
     "chu_dau_tu": "CÔNG TY TNHH THƯƠNG MẠI ABC",
     "ten_ban_ve": "MẶT BẰNG LƯỚI TRỤC VÀ CỘT",
     "loai_ho_so": "BVTC",
-    "ngay": "18/11/2026"
+    "ngay": "18/11/2026",
+    "chu_tri": true,
+    "kiem_tra": true,
+    "thiet_ke": true
   }
 }
