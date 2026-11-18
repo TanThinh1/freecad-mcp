@@ -21,7 +21,7 @@ from primitives import Circle, Dim, Drawing, Line, Text, cap_to_em, drawing_exte
 from scale import SCALES, place_rects
 from spec_b import SpecError
 from spec_c import level_text, percent_text, round_half_up
-from tcvn import ARIAL_CAP, LAYER_AXIS, LAYER_BUBBLE, LAYER_COLUMN, LAYER_DIM, LAYER_FRAME, LAYER_TEXT, LAYER_THIN
+from tcvn import ARIAL_CAP, est_width, LAYER_AXIS, LAYER_BUBBLE, LAYER_COLUMN, LAYER_DIM, LAYER_FRAME, LAYER_TEXT, LAYER_THIN
 
 LAYER_MAIN, LAYER_RAFTER, LAYER_LEVEL = "NET-CHINH", "KEO", "NET-TAM"
 NEEDED_LAYERS = (LAYER_MAIN, LAYER_RAFTER, LAYER_LEVEL, LAYER_COLUMN, LAYER_AXIS, LAYER_BUBBLE, LAYER_DIM, LAYER_TEXT, LAYER_FRAME, LAYER_THIN)
@@ -125,7 +125,9 @@ def layout(sp: dict, s: int):
     lx2 = lx1 - P["kt_giua_cac_duong"]
     y_cot, y_top = X(H), X(sp["y_top"])
     sin_t = math.sin(th)
-    x_top_start = X(nodes[1][0] - hr / (2.0 * sin_t)) if sp["so_mai"] == 2 else X(nodes[-1][0] - hr / (2.0 * sin_t))
+    d_exit = hr / (2.0 * sin_t)          # distance from the top node along x to where y = y_top leaves the rafter's upper edge (may exceed the member for shallow slopes)
+    x_node_top = nodes[1][0] if sp["so_mai"] == 2 else nodes[-1][0]
+    x_top_start = X(max(x_node_top - d_exit, -hc / 2.0))          # clamped to the outer face of column A
     dims.append(Dim(kind="v", p1=(lx1, 0.0), p2=(lx1, y_cot), line_pos=lx1, value=H, ext_from=lx1, layer=LAYER_DIM, role="chain", ext_lines=False, text=fmt_value(H)))
     dims.append(Dim(kind="v", p1=(lx1, y_cot), p2=(lx1, y_top), line_pos=lx1, value=sp["rise"], ext_from=lx1, layer=LAYER_DIM, role="chain", ext_lines=False,
                     text=str(round_half_up(sp["rise_exact"]))))
@@ -136,27 +138,54 @@ def layout(sp: dict, s: int):
     # ---- level markers on the right (datum lines from the structure to the symbol)
     x_m = X(nh + hc / 2.0) + g - 4.0
     x_col_out = X(nh + hc / 2.0)
-    x_top_line = X(nodes[1][0] + hr / (2.0 * sin_t)) if sp["so_mai"] == 2 else x_col_out
-    for y, label, x0 in ((0.0, "+0.000", None), (y_cot, level_text(H), x_col_out), (y_top, level_text(sp["y_top_exact"]), x_top_line)):
+    x_top_line = X(min(nodes[1][0] + d_exit, nh + hc / 2.0)) if sp["so_mai"] == 2 else x_col_out
+    stack_h = SYMBOL_TRI + 0.8 + hb + 1.0                       # vertical room one level symbol + text needs
+    stagger = (y_top - y_cot) < stack_h                          # rise too small on paper: put the top symbol further right instead of on top of the eave one
+    for y, label, x0, xm in ((0.0, "+0.000", None, x_m), (y_cot, level_text(H), x_col_out, x_m),
+                             (y_top, level_text(sp["y_top_exact"]), x_top_line, x_m + (SYMBOL_BAR + 3.0 if stagger else 0.0))):
         if x0 is not None:
-            add(Line(layer=LAYER_LEVEL, tag="level_line", p1=(x0, y), p2=(x_m, y)))
-        add(Line(layer=LAYER_TEXT, tag="level_tri", p1=(x_m, y), p2=(x_m - 1.5, y + SYMBOL_TRI)))
-        add(Line(layer=LAYER_TEXT, tag="level_tri", p1=(x_m, y), p2=(x_m + 1.5, y + SYMBOL_TRI)))
-        add(Line(layer=LAYER_TEXT, tag="level_bar", p1=(x_m - 1.5, y + SYMBOL_TRI), p2=(x_m - 1.5 + SYMBOL_BAR, y + SYMBOL_TRI)))
-        add(Text(layer=LAYER_TEXT, tag="level_text", s=label, pos=(x_m - 1.0, y + SYMBOL_TRI + 0.8), h=hb))
+            add(Line(layer=LAYER_LEVEL, tag="level_line", p1=(x0, y), p2=(xm, y)))
+        add(Line(layer=LAYER_TEXT, tag="level_tri", p1=(xm, y), p2=(xm - 1.5, y + SYMBOL_TRI)))
+        add(Line(layer=LAYER_TEXT, tag="level_tri", p1=(xm, y), p2=(xm + 1.5, y + SYMBOL_TRI)))
+        add(Line(layer=LAYER_TEXT, tag="level_bar", p1=(xm - 1.5, y + SYMBOL_TRI), p2=(xm - 1.5 + SYMBOL_BAR, y + SYMBOL_TRI)))
+        add(Text(layer=LAYER_TEXT, tag="level_text", s=label, pos=(xm - 1.0, y + SYMBOL_TRI + 0.8), h=hb))
     # ---- section labels and slope texts
     cap, kn = P["cao_chu_so_lieu"], P["khoang_cach_nhan"]
     add(Text(layer=LAYER_TEXT, tag="section_label", s=sp["col"]["text"], pos=(X(hc / 2.0) + kn, X(H) / 2.0), h=cap))
     add(Text(layer=LAYER_TEXT, tag="section_label", s=sp["col"]["text"], pos=(X(nh - hc / 2.0) - kn, X(H) / 2.0), h=cap, halign="right"))
     slope_txt = f"i = {percent_text(sp['do_doc_mai'])}% ({_fmt_deg(sp['theta_deg'])}°)"
+    def clear_of_datum(px, py, w_txt, ang):
+        """True when the text box (centre-anchored baseline at (px, py), rotated by ang) keeps 0.6 mm from the horizontal datum line at y_top."""
+        half = w_txt / 2.0 * abs(math.sin(ang))
+        lo, hi = py - half - 0.3 * cap, py + half + 1.2 * cap * math.cos(ang) + 0.3 * cap
+        return not (lo - 0.6 <= y_top <= hi + 0.6)
+
     for a, b in zip(nodes, nodes[1:]):
         ang = math.atan2(b[1] - a[1], b[0] - a[0])
         nl = (-math.sin(ang), math.cos(ang))
-        mid = (X((a[0] + b[0]) / 2.0), X((a[1] + b[1]) / 2.0))
         hw = X(hr) / 2.0
         deg = math.degrees(ang)
-        add(Text(layer=LAYER_TEXT, tag="section_label", s=sp["raf"]["text"], pos=(mid[0] + nl[0] * (hw + kn), mid[1] + nl[1] * (hw + kn)), h=cap, rot=deg, halign="center"))
-        add(Text(layer=LAYER_TEXT, tag="slope_text", s=slope_txt, pos=(mid[0] - nl[0] * (hw + kn + cap), mid[1] - nl[1] * (hw + kn + cap)), h=cap, rot=deg, halign="center"))
+        w_lab, w_slope = est_width(sp["raf"]["text"], cap_to_em(cap)), est_width(slope_txt, cap_to_em(cap))
+
+        def spot(t, off, w_txt):
+            px, py = X(a[0] + (b[0] - a[0]) * t), X(a[1] + (b[1] - a[1]) * t)
+            return px + nl[0] * off, py + nl[1] * off
+
+        # section label above the rafter (slid along it, away from the top datum line); when no spot is clear (shallow roofs) both texts go below the rafter
+        lab_pos = None
+        for t in (0.5, 0.6, 0.4, 0.7, 0.3, 0.8, 0.2):
+            cand = spot(t, hw + kn, w_lab)
+            if clear_of_datum(cand[0], cand[1], w_lab, ang):
+                lab_pos = cand
+                break
+        below1, below2 = -(hw + kn + cap), -(hw + kn + 2 * cap + 1.5)
+        if lab_pos is None:
+            lab_pos = spot(0.5, below1, w_lab)
+            slope_off = below2
+        else:
+            slope_off = below1
+        add(Text(layer=LAYER_TEXT, tag="section_label", s=sp["raf"]["text"], pos=lab_pos, h=cap, rot=deg, halign="center"))
+        add(Text(layer=LAYER_TEXT, tag="slope_text", s=slope_txt, pos=spot(0.5, slope_off, w_slope), h=cap, rot=deg, halign="center"))
     # ---- title + scale below the span dimension
     cap_t, cap_n = P["cao_chu_tieu_de"], P["cao_chu_ghi_chu"]
     xc = X(nh) / 2.0
@@ -175,6 +204,23 @@ def _extent(prims, dims, P):
     return drawing_extent(allp)
 
 
+def labels_overlap(sp: dict, s: int):
+    """Reason string when, at scale 1:s, the section labels / slope texts cannot fit (columns too close, rafter shorter than its texts); else ''."""
+    P = sp["params"]
+    cap, kn = P["cao_chu_so_lieu"], P["khoang_cach_nhan"]
+    em = cap_to_em(cap)
+    hc, nh = sp["col"]["h"], sp["nhip"]
+    w_col = est_width(sp["col"]["text"], em)
+    free = (nh - hc) / s - 2 * kn
+    if free < 2 * w_col + 2.0:
+        return f"hai nhãn cột ({w_col:.0f} mm mỗi nhãn) không vừa khoảng trống giữa hai cột ({free:.0f} mm trên giấy)"
+    slope_txt = f"i = {percent_text(sp['do_doc_mai'])}% ({_fmt_deg(sp['theta_deg'])}°)"
+    need = max(est_width(sp["raf"]["text"], em), est_width(slope_txt, em)) + 4.0
+    if sp["raf_len"] / s < need:
+        return f"chiều dài kèo trên giấy {sp['raf_len'] / s:.0f} mm ngắn hơn nhãn kèo/độ dốc ({need:.0f} mm)"
+    return ""
+
+
 def build(sp: dict, profile: dict) -> Drawing:
     missing = [n for n in NEEDED_LAYERS if n not in profile]
     if missing:
@@ -183,6 +229,10 @@ def build(sp: dict, profile: dict) -> Drawing:
     gap = P["khe_vung_ve"]
     tried, chosen = [], None
     for s in ([sp["scale"]] if sp["scale"] else sorted(SCALES)):
+        bad = labels_overlap(sp, s)
+        if bad:
+            tried.append(f"1:{s} bị loại: {bad}")
+            continue
         prims, dims, meta = layout(sp, s)
         bb = _extent(prims, dims, P)
         t = place_rects([bb], gap)
