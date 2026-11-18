@@ -58,6 +58,7 @@ def _profile_path() -> str | None:
     return None
 
 
+NOT_WRITABLE = "Không ghi được vào thư mục out của fork (kiểm tra quyền ghi hoặc ổ đĩa đầy)."
 NO_PROFILE = ("Chưa cấu hình profile TCVN (bảng 18 layer). Đặt biến môi trường TCVN_PROFILE = đường dẫn profile.yaml trong mục freecad-dev của cấu hình "
               "Claude Desktop, hoặc ghi đường dẫn đó vào tệp out\\tcvn_profile.txt trong thư mục fork.")
 
@@ -92,8 +93,9 @@ def _run_cli(args: list[str], freecadcmd: list[str] | None = None) -> dict:
 
 
 def _check_loai(loai) -> str | None:
-    if loai not in LOAI:
-        return f"loai = {loai!r} không hợp lệ. Dùng một trong: thang, luoi_cot, khung_ngang."
+    if not isinstance(loai, str) or loai not in LOAI:
+        shown = loai if isinstance(loai, str) and len(loai) <= 40 else type(loai).__name__
+        return f"loai = {shown!r} không hợp lệ. Dùng một trong: thang, luoi_cot, khung_ngang."
     return None
 
 
@@ -101,12 +103,15 @@ def _spec_text(spec) -> tuple[str | None, str | None]:
     """spec (dict, or a JSON string) -> (JSON text, error)."""
     if isinstance(spec, str):
         try:
-            spec = json.loads(spec)
-        except ValueError as e:
-            return None, f"spec không phải JSON hợp lệ: {e}"
+            spec = json.loads(spec.lstrip("﻿"))
+        except ValueError:
+            return None, "spec không phải JSON hợp lệ (chuỗi JSON bị lỗi cú pháp)."
     if not isinstance(spec, dict):
         return None, "spec phải là một đối tượng JSON {...}."
-    text = json.dumps(spec, ensure_ascii=False)
+    try:
+        text = json.dumps(spec, ensure_ascii=False, allow_nan=False)
+    except (ValueError, TypeError):
+        return None, "spec chứa giá trị không hợp lệ (NaN, Infinity hoặc kiểu không phải JSON)."
     if len(text.encode("utf-8")) > 20000:
         return None, "spec quá lớn (> 20000 byte)."
     return text, None
@@ -129,10 +134,13 @@ def kiem_tra(loai: str, spec, freecadcmd: list[str] | None = None) -> dict:
         return dict(hop_le=False, loai=loai, loi=[err])
     if not _profile_path():
         return dict(hop_le=False, loai=loai, loi=[NO_PROFILE], loi_he_thong=True)
-    JOBS.mkdir(parents=True, exist_ok=True)
     tmp = JOBS / f"_kiemtra_{uuid.uuid4().hex[:8]}.json"
     try:
+        JOBS.mkdir(parents=True, exist_ok=True)
         tmp.write_text(text, encoding="utf-8")
+    except OSError:
+        return dict(hop_le=False, loai=loai, loi=[NOT_WRITABLE], loi_he_thong=True)
+    try:
         return _run_cli(["check", loai, str(tmp)], freecadcmd)
     finally:
         try:
@@ -171,21 +179,40 @@ def _summarize(ten: str) -> dict:
                 loi=rep.get("errors"), tep=files)
 
 
+def _kill_tree(proc) -> None:
+    """Stop the make_drawing process and everything it started (FreeCAD, ODA)."""
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, stdin=subprocess.DEVNULL, timeout=20, creationflags=0x08000000)
+        else:
+            proc.kill()
+    except (OSError, subprocess.SubprocessError):
+        proc.kill()
+
+
 def _worker(job: dict, spec_path: Path, env: dict) -> None:
     global _current
     log = JOBS / job["job_id"] / "log.txt"
     t0 = time.perf_counter()
+    wall0 = time.time()
     try:
+        try:
+            (OUT / job["ten"] / "report.json").unlink()          # never accept a report left over from an earlier run
+        except OSError:
+            pass
         with open(log, "w", encoding="utf-8", errors="replace") as lf:
             proc = subprocess.Popen([sys.executable, str(DRAW / "make_drawing.py"), str(spec_path), "--out", str(OUT)], stdin=subprocess.DEVNULL, stdout=lf, stderr=subprocess.STDOUT, env=env,
                                     cwd=str(REPO), creationflags=0x08000000 if os.name == "nt" else 0)
             try:
                 proc.wait(timeout=JOB_TIMEOUT)
             except subprocess.TimeoutExpired:
-                proc.kill()
+                _kill_tree(proc)
                 job.update(trang_thai="loi", loi=f"Dựng bản vẽ quá {JOB_TIMEOUT} giây, đã dừng.")
         if job["trang_thai"] == "dang_chay":
             summary = _summarize(job["ten"])
+            rp = OUT / job["ten"] / "report.json"
+            if summary and (not rp.is_file() or rp.stat().st_mtime < wall0 - 1.0):
+                summary = {}
             if not summary:
                 job.update(trang_thai="loi", loi="Dựng xong nhưng không có báo cáo (report.json); xem log trong " + str(Path("out") / "_jobs" / job["job_id"] / "log.txt"))
             else:
@@ -223,14 +250,28 @@ def ve(loai: str, spec, freecadcmd: list[str] | None = None) -> dict:
             return dict(hop_le=False, ban=True, loi=[f"Đang dựng bản vẽ {c['ten']} (job_id {c['job_id']}, đã chạy {int(time.time() - c['_t0'])} giây). Chỉ chạy một bản vẽ một lúc: "
                                                      f"đợi xong (trang_thai_ban_ve) rồi gọi lại."], job_dang_chay=c["job_id"])
         job_id = uuid.uuid4().hex[:8]
-        d = JOBS / job_id
-        d.mkdir(parents=True, exist_ok=True)
-        raw = d / "spec_goc.json"
-        raw.write_text(text, encoding="utf-8")
-        norm = d / "spec.json"
-        chk = _run_cli(["check", loai, str(raw), "--write-spec", str(norm)], freecadcmd)
+        tmp_raw, tmp_norm = JOBS / f"_ve_{job_id}_goc.json", JOBS / f"_ve_{job_id}_chuan.json"
+        try:
+            JOBS.mkdir(parents=True, exist_ok=True)
+            tmp_raw.write_text(text, encoding="utf-8")
+        except OSError:
+            return dict(hop_le=False, loai=loai, loi=[NOT_WRITABLE], loi_he_thong=True)
+        chk = _run_cli(["check", loai, str(tmp_raw), "--write-spec", str(tmp_norm)], freecadcmd)
         if not chk.get("hop_le"):
-            return dict(hop_le=False, loai=loai, loi=chk.get("loi", ["spec không hợp lệ."]))
+            for t in (tmp_raw, tmp_norm):
+                try:
+                    t.unlink()
+                except OSError:
+                    pass
+            return dict(hop_le=False, loai=loai, loi=chk.get("loi", ["spec không hợp lệ."]), **{k: chk[k] for k in ("thieu_bat_buoc", "loi_he_thong") if k in chk})
+        d = JOBS / job_id
+        norm = d / "spec.json"
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            tmp_raw.replace(d / "spec_goc.json")
+            tmp_norm.replace(norm)
+        except OSError:
+            return dict(hop_le=False, loai=loai, loi=[NOT_WRITABLE], loi_he_thong=True)
         job = dict(job_id=job_id, loai=loai, ten=chk["ten"], trang_thai="dang_chay", bat_dau=time.strftime("%Y-%m-%d %H:%M:%S"), thu_muc=f"out\\{chk['ten']}\\",
                    ty_le_du_kien=chk.get("ty_le"), canh_bao=chk.get("canh_bao", []), da_dung_mac_dinh=chk.get("da_dung_mac_dinh", []), _t0=time.time())
         _current = job
@@ -258,7 +299,7 @@ def _load_job(job_id: str) -> dict | None:
 
 def trang_thai(job_id: str = "") -> tuple[dict, str | None]:
     """-> (status dict, path of the PNG to attach or None)."""
-    job_id = (job_id or "").strip()
+    job_id = job_id.strip() if isinstance(job_id, str) else ""
     if not job_id:
         with _lock:
             job_id = _current["job_id"] if _current else (max(_jobs.values(), key=lambda j: j["_t0"])["job_id"] if _jobs else "")
@@ -266,7 +307,7 @@ def trang_thai(job_id: str = "") -> tuple[dict, str | None]:
             return dict(hop_le=False, loi=["Chưa có bản vẽ nào được dựng trong phiên này. Gọi ve_ban_ve trước."]), None
     job = _load_job(job_id)
     if job is None:
-        return dict(hop_le=False, loi=[f"Không tìm thấy job_id {job_id!r}."]), None
+        return dict(hop_le=False, loi=[f"Không tìm thấy job_id {job_id[:20]!r}."]), None
     pub = {k: v for k, v in job.items() if not k.startswith("_")}
     if job.get("trang_thai") == "dang_chay":
         pub["da_chay_giay"] = int(time.time() - job["_t0"]) if "_t0" in job else None
@@ -276,4 +317,6 @@ def trang_thai(job_id: str = "") -> tuple[dict, str | None]:
         p = REPO / kt["png"]
         if p.is_file() and p.stat().st_size <= MAX_PNG_BYTES:
             png = str(p)
+        elif p.is_file():
+            pub["ghi_chu"] = f"Ảnh PNG lớn hơn {MAX_PNG_BYTES // 1000} KB nên không đính kèm; mở tệp {kt['png']}."
     return pub, png

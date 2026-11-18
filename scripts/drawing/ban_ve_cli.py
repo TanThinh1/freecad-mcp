@@ -21,6 +21,11 @@ LOAI = {"thang": "A", "luoi_cot": "B", "khung_ngang": "C"}
 EXAMPLE = {"thang": "a1_3600x20.json", "luoi_cot": "b2_12000x30000.json", "khung_ngang": "c1_12000x6000.json"}
 MAX_SPEC_BYTES = 20000
 
+KHOA_HOP_LE = {
+    "thang": {"cao_tang", "so_bac", "be_rong_mat_bac", "be_rong_ve", "chieu_day_tam", "dam_con", "ty_le", "bo_cuc", "ty_le_rieng", "khung_ten", "tham_so"},
+    "luoi_cot": {"nhip", "dai_nha", "buoc_cot", "tiet_dien_cot", "ty_le", "kho_giay", "gom_nhan_tiet_dien", "khung_ten", "tham_so"},
+    "khung_ngang": {"nhip", "cao_cot", "do_doc_mai", "so_mai", "tiet_dien_cot", "tiet_dien_keo", "ve_truc_cau_kien", "ty_le", "kho_giay", "khung_ten", "tham_so"},
+}
 # Mandatory numbers per type: when one is missing the answer is "ask the customer", never a guess.
 BAT_BUOC = {"thang": ("cao_tang", "so_bac", "be_rong_ve"), "luoi_cot": ("nhip", "dai_nha", "buoc_cot"), "khung_ngang": ("nhip", "cao_cot", "do_doc_mai", "so_mai")}
 # Secondary values used when the spec omits them (the answer lists every default that was applied so the assistant can tell the customer).
@@ -163,13 +168,29 @@ def check(loai: str, spec_path: str, write_spec: str | None, profile: str | None
     try:
         if os.path.getsize(spec_path) > MAX_SPEC_BYTES:
             return dict(hop_le=False, loai=loai, loi=[f"spec quá lớn (> {MAX_SPEC_BYTES} byte)."])
-        raw = json.load(open(spec_path, encoding="utf-8-sig"))
-    except (OSError, ValueError) as e:
-        return dict(hop_le=False, loai=loai, loi=[f"không đọc được spec JSON: {e}"])
+        def _bad_const(c):
+            raise ValueError("NaN/Infinity")
+        raw = json.load(open(spec_path, encoding="utf-8-sig"), parse_constant=_bad_const)
+    except ValueError:
+        return dict(hop_le=False, loai=loai, loi=["spec JSON không hợp lệ (lỗi cú pháp, hoặc có NaN/Infinity)."])
+    except OSError:
+        return dict(hop_le=False, loai=loai, loi=["không đọc được tệp spec."])
     if not isinstance(raw, dict):
         return dict(hop_le=False, loai=loai, loi=["spec phải là một đối tượng JSON {...}."])
     k = LOAI[loai]
     spec = dict(raw)
+    canh_bao_them = []
+    for ig in ("ten", "loai"):
+        if ig in spec:
+            spec.pop(ig)
+            canh_bao_them.append(f"Khóa {ig!r} trong spec bị bỏ qua: {'tên bản vẽ do hệ thống tự sinh' if ig == 'ten' else 'loại lấy từ tham số loai của công cụ'}.")
+    la = sorted(x for x in spec if x not in KHOA_HOP_LE[loai])
+    if la:
+        return dict(hop_le=False, loai=loai, loi=[f"Tham số không được hỗ trợ: {', '.join(repr(x[:40]) for x in la)}. Tham số hợp lệ của loại {loai}: {', '.join(sorted(KHOA_HOP_LE[loai]))}. "
+                                                   "Kiểm tra lỗi gõ tên tham số (không bỏ qua im lặng)."])
+    lon = [x for x, v in spec.items() if isinstance(v, (int, float)) and not isinstance(v, bool) and abs(v) > 1e7]
+    if lon:
+        return dict(hop_le=False, loai=loai, loi=[f"{x} có giá trị quá lớn (> 10 triệu); đơn vị là mm (hoặc % / số đếm)." for x in lon])
     thieu = [x for x in BAT_BUOC[loai] if spec.get(x) is None]
     if thieu:
         return dict(hop_le=False, loai=loai, thieu_bat_buoc=thieu,
@@ -186,7 +207,8 @@ def check(loai: str, spec_path: str, write_spec: str | None, profile: str | None
         spec["khung_ten"] = kt
         da_dung.append(dict(ten="khung_ten", gia_tri=kt, y_nghia="khách chưa cung cấp: dùng tên mẫu (giả lập) và ngày hôm nay; ô họ tên người ký để trống"))
     spec["loai"] = k
-    ten = auto_name(loai, spec)
+    import hashlib
+    ten = auto_name(loai, spec)[:55] + "_" + hashlib.sha1(json.dumps(spec, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:6]
     spec["ten"] = ten
     import build_a
     import build_b
@@ -207,8 +229,8 @@ def check(loai: str, spec_path: str, write_spec: str | None, profile: str | None
     sc = f"1:{D.scale}"
     if D.info.get("scale_plan") and D.info["scale_plan"] != D.scale:
         sc = f"mặt cắt 1:{D.scale}, mặt bằng 1:{D.info['scale_plan']}"
-    res = dict(hop_le=True, loai=loai, ten=ten, ty_le=sc, bo_cuc=D.info.get("layout"), ly_do=D.info["reason"], so_do=_derived(loai, sp, D),
-               canh_bao=list(D.info.get("warnings", [])), da_dung_mac_dinh=da_dung, thu_muc_ket_qua=f"out\\{ten}\\")
+    res = dict(hop_le=True, loai=loai, ten=ten, kho_giay=D.info.get("sheet", "A3"), ty_le=sc, bo_cuc=D.info.get("layout"), ly_do=D.info["reason"], so_do=_derived(loai, sp, D),
+               canh_bao=canh_bao_them + list(D.info.get("warnings", [])), da_dung_mac_dinh=da_dung, thu_muc_ket_qua=f"out\\{ten}\\")
     if k == "C":
         res["quy_uoc"] = D.info.get("convention")
     if write_spec:
