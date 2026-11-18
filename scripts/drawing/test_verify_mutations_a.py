@@ -180,6 +180,60 @@ def main():
         t = [p for p in Dm.prims if p.tag == "dim_single_text" and p.s == "250"][0]
         t.halign, t.pos = "center", ((d.p1[0] + d.p2[0]) / 2, d.line_pos + 0.625)
     need({"1.14"}, prim_check(mut(b_label_centered_over_ticks, D3), sp3), "prim_b_label_centered_over_ticks_1:50")
+    # (8) mutants found by the independent review of type A that used to slip through
+    def swap_level_texts_a(Dm):
+        ta = [p for p in Dm.prims if p.tag == "level_text" and p.s == "+0.000"][0]
+        tb = [p for p in Dm.prims if p.tag == "level_text" and p.s != "+0.000"][0]
+        ta.s, tb.s = tb.s, ta.s
+    need({"1.18"}, prim_check(mut(swap_level_texts_a), sp1), "prim_level_texts_swapped")
+
+    def dim_label(old, new, tag="dim_single_text"):
+        def fn(Dm):
+            [p for p in Dm.prims if p.tag == tag and p.s == old][0].s = new
+        return fn
+    need({"1.19"}, prim_check(mut(dim_label("250", "260")), sp1), "prim_b_dimension_label_260_on_250")
+    need({"1.19"}, prim_check(mut(dim_label("180", "25")), sp1), "prim_h_dimension_label_25_on_180")
+    need({"1.19"}, prim_check(mut(dim_label("3600", "3660", "dim_overall_text")), sp1), "prim_total_height_label_3660")
+    need({"1.19"}, prim_check(mut(dim_label("800", "900")), sp1), "prim_plan_width_label_900_on_800")
+
+    def drop_tag(tag, idx=0):
+        def fn(Dm):
+            Dm.prims.remove([p for p in Dm.prims if p.tag == tag][idx])
+        return fn
+    need({"1.16"}, prim_check(mut(drop_tag("up_text")), sp1), "prim_up_text_missing")
+    need({"1.16"}, prim_check(mut(drop_tag("plan_arrow")), sp1), "prim_up_arrow_shaft_missing")
+    need({"1.18"}, prim_check(mut(drop_tag("floor_upper")), sp1), "prim_upper_floor_stub_missing")
+    need({"1.18"}, prim_check(mut(drop_tag("level_tri")), sp1), "prim_level_triangle_missing")
+
+    def tiny_notes(Dm):
+        for p in Dm.prims:
+            if p.tag == "note":
+                p.h = 1.0
+    need({"1.17"}, prim_check(mut(tiny_notes), sp1), "prim_notes_height_1mm")
+    need({"1.15"}, prim_check(mut(drop_tag("dim_overall_ext")), sp1), "prim_extension_line_removed")
+
+    def label_on_own_line(Dm):
+        d = [x for x in Dm.dims if x.text == "180"][0]
+        t = [p for p in Dm.prims if p.tag == "dim_single_text" and p.s == "180"][0]
+        t.halign, t.rot, t.pos = "left", 0.0, (d.line_pos - 1.0, (d.p1[1] + d.p2[1]) / 2)           # label straddling its own dimension line
+    need({"1.14", "1.17"}, prim_check(mut(label_on_own_line), sp1), "prim_h_label_placed_on_its_own_dimension_line")
+
+    def steps_outside_plan(Dm):
+        for p in Dm.prims:
+            if p.tag == "step_no":
+                p.pos = (p.pos[0], p.pos[1] + 30.0)
+    need({"1.17"}, prim_check(mut(steps_outside_plan), sp1), "prim_step_numbers_above_the_plan")
+
+    def level_text_on_symbol(Dm):
+        t = [p for p in Dm.prims if p.tag == "level_text"][0]
+        t.pos = (t.pos[0], t.pos[1] - 3.0)
+    need({"1.17"}, prim_check(mut(level_text_on_symbol), sp1), "prim_level_text_on_the_level_symbol_lines")
+
+    def floating_ext(Dm):
+        e = [p for p in Dm.prims if p.tag == "dim_single_ext" and abs(p.p1[0] - p.p2[0]) < 1e-9][0]
+        e.p1 = (e.p1[0], e.p1[1] + 6.0)
+    need({"1.15"}, prim_check(mut(floating_ext), sp1), "prim_extension_line_starts_6mm_off_the_geometry")
+
     # a spec that disagrees with the (correct) drawing must fail too: b changed in the spec only
     sp_b = dict(sp1, b=260)
     need({"1.2", "1.3", "1.4"}, prim_check(D1, sp_b), "spec_b_260_vs_drawing_b_250")

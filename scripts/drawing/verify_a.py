@@ -119,6 +119,7 @@ def check_primitives_a(C: Checks, D, sp):
     C.add(1, "1.10", "ký hiệu vết cắt 1-1 trên mặt bằng (2 đầu, nhãn 1, ở giữa bề rộng) và tên hai hình", ok10, f"nhãn {[p.s for p in cl]}, y vết cắt {[round(y, 3) for y in yc]} (w/2 = {w / 2:g})")
     check_layout_a(C, D, sp)
     check_dim_text_clear(C, D)
+    check_extras_a(C, D, sp)
     check_expressions(C, [p.s for p in D.prims if isinstance(p, Text)], 1, "1.20", "chữ trên bản vẽ")
     if sp.get("warnings"):
         C.info(1, "1.11", "cảnh báo mềm (không phải lỗi)", " | ".join(sp["warnings"]))
@@ -172,10 +173,131 @@ def _hits_text(t, line, step=0.05, v_hi=1.05):
 
 def check_dim_text_clear(C: Checks, D):
     """1.14: no dimension text runs over a tick or an extension line (measured on the text box, digit height)."""
-    segs = [p for p in D.prims if isinstance(p, Line) and p.tag.startswith("dim_") and (p.tag.endswith("_ext") or p.tag.endswith("_tick"))]
+    segs = [p for p in D.prims if isinstance(p, Line) and p.tag.startswith("dim_") and (p.tag.endswith("_ext") or p.tag.endswith("_tick") or p.tag.endswith("_line"))]
     texts = [p for p in D.prims if isinstance(p, Text) and p.tag.startswith("dim_") and p.tag.endswith("_text")]
     bad = [(t.s, round(t.pos[0], 1), round(t.pos[1], 1)) for t in texts if any(_hits_text(t, sg) for sg in segs)]
-    C.add(1, "1.14", "chữ kích thước không đè lên tick hay đường gióng (đo theo khung chữ)", not bad, f"{len(texts)} chữ kích thước, {len(segs)} tick/đường gióng; chữ bị đè: {bad}")
+    C.add(1, "1.14", "chữ kích thước không đè lên tick, đường gióng hay đường kích thước (đo theo khung chữ)", not bad, f"{len(texts)} chữ kích thước, {len(segs)} tick/đường gióng; chữ bị đè: {bad}")
+
+
+def _pt_seg(p, a, b):
+    ab = (b[0] - a[0], b[1] - a[1])
+    L2 = ab[0] ** 2 + ab[1] ** 2
+    t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / L2))
+    return math.hypot(p[0] - (a[0] + t * ab[0]), p[1] - (a[1] + t * ab[1]))
+
+
+def _label_of(v):
+    return f"{round(v):d}" if abs(v - round(v)) < 1e-9 else f"{v:.1f}".replace(".", ",")
+
+
+def _coord(p, kind):
+    """coordinate along the dimension (x for 'h', y for 'v') and across it"""
+    return (p[0], p[1]) if kind == "h" else (p[1], p[0])
+
+
+def check_extras_a(C: Checks, D, sp):
+    """1.15 dimension structure / extension lines touch the geometry, 1.16 UP text + arrow, 1.17 text height / clearance / step numbers inside the plan,
+    1.18 each level text on its own level line + floor stubs + level symbols, 1.19 every dimension label matches its value."""
+    M = D.meta
+    n, H, b = sp["so_bac"], sp["cao_tang"], sp["b"]
+    L = (n - 1) * b
+    s, sp_ = D.view_scale("section"), D.view_scale("plan")
+    by = lambda *tags: [p for p in D.prims if p.tag in tags]
+    lines = [p for p in D.prims if isinstance(p, Line) and not p.sheet]
+    geo = [p for p in lines if not p.tag.startswith("dim_")]
+    for r_ in (p for p in D.prims if isinstance(p, Rect) and not p.sheet):          # rectangle edges count as geometry too (the plan outline)
+        (ax_, ay_), (bx_, by_) = r_.p0, r_.p1
+        geo += [Line(layer=r_.layer, tag="rect_edge", p1=a_, p2=b_) for a_, b_ in (((ax_, ay_), (bx_, ay_)), ((bx_, ay_), (bx_, by_)), ((bx_, by_), (ax_, by_)), ((ax_, by_), (ax_, ay_)))]
+    # ---- 1.15
+    bad15 = []
+    for d in D.dims:
+        r = d.role
+        ticks = [p for p in lines if p.tag == f"dim_{r}_tick"]
+        exts = [p for p in lines if p.tag == f"dim_{r}_ext"]
+        along = lambda p: p[0] if d.kind == "h" else p[1]          # coordinate along the dimension
+        across = lambda p: p[1] if d.kind == "h" else p[0]         # coordinate across (the dimension line position)
+        dl = [p for p in lines if p.tag == f"dim_{r}_line" and abs(across(p.p1) - d.line_pos) < 1e-9 and abs(across(p.p2) - d.line_pos) < 1e-9
+              and {round(along(p.p1), 6), round(along(p.p2), 6)} == {round(along(d.p1), 6), round(along(d.p2), 6)}]
+        if not dl:
+            bad15.append((d.text, "thiếu đường kích thước"))
+            continue
+        for e in (d.p1, d.p2):
+            c = along(e)
+            tk = [t for t in ticks if abs((along(t.p1) + along(t.p2)) / 2 - c) < 1e-6 and abs((across(t.p1) + across(t.p2)) / 2 - d.line_pos) < 1e-6]
+            ex = [x for x in exts if abs(along(x.p1) - c) < 1e-6 and abs(along(x.p2) - c) < 1e-6 and min(abs(across(x.p1) - d.line_pos), abs(across(x.p2) - d.line_pos)) < 2.0]
+            if not tk:
+                bad15.append((d.text, "thiếu tick"))
+            if len(ex) != 1:
+                bad15.append((d.text, f"{len(ex)} đường gióng tại một đầu"))
+                continue
+            x = ex[0]
+            far = x.p1 if abs(across(x.p1) - d.line_pos) > abs(across(x.p2) - d.line_pos) else x.p2
+            dist = min((_pt_seg(far, g.p1, g.p2) for g in geo), default=99.0)
+            if dist > 1.5:
+                bad15.append((d.text, f"đường gióng cách hình {dist:.1f} mm"))
+    C.add(1, "1.15", "mỗi kích thước có đường kích thước, 2 tick, 2 đường gióng; đường gióng bắt đầu sát hình đo (≤ 1,5 mm), không lơ lửng", not bad15, f"{len(D.dims)} kích thước; lỗi: {bad15[:4]}")
+    # ---- 1.16
+    up = by("up_text")
+    arrow = [p for p in by("plan_arrow") if isinstance(p, Line)]
+    outl = by("plan_outline")
+    ok16 = len(up) == 1 and up[0].s == "LÊN" and len(arrow) == 3 and len(outl) == 1
+    d16 = f"{len(up)} chữ LÊN, {len(arrow)} nét mũi tên"
+    if ok16:
+        r_ = outl[0]
+        x0, y0, x1, y1 = min(r_.p0[0], r_.p1[0]), min(r_.p0[1], r_.p1[1]), max(r_.p0[0], r_.p1[0]), max(r_.p0[1], r_.p1[1])
+        shaft = [a for a in arrow if abs(a.p1[1] - a.p2[1]) < 1e-9]
+        heads = [a for a in arrow if abs(a.p1[1] - a.p2[1]) >= 1e-9]
+        ok16 = (len(shaft) == 1 and len(heads) == 2 and all(abs(hd.p1[0] - shaft[0].p2[0]) < 1e-6 and abs(hd.p1[1] - shaft[0].p1[1]) < 1e-6 for hd in heads)
+                and y0 < shaft[0].p1[1] < y1 and abs((shaft[0].p2[0] - shaft[0].p1[0]) * sp_ - (L - b)) < 1e-3 and up[0].pos[0] < x0 and y0 <= up[0].pos[1] <= y1)
+        d16 += f"; thân mũi tên dài {(shaft[0].p2[0] - shaft[0].p1[0]) * sp_:.1f} mm thật (cần {L - b:g})" if shaft else "; thiếu thân mũi tên"
+    C.add(1, "1.16", "mặt bằng: chữ 'LÊN' nằm ngoài hình chữ nhật bên trái và mũi tên (thân + 2 cánh) nằm trong hình, thân dài (n−2)·b", ok16, d16)
+    # ---- 1.17
+    texts = [p for p in D.prims if isinstance(p, Text) and not p.sheet]
+    small = [(t.s, t.h) for t in texts if t.h < 2.0 - 1e-9]
+    inside = True
+    if outl:
+        r_ = outl[0]
+        x0, y0, x1, y1 = min(r_.p0[0], r_.p1[0]), min(r_.p0[1], r_.p1[1]), max(r_.p0[0], r_.p1[0]), max(r_.p0[1], r_.p1[1])
+        inside = all(x0 <= t.pos[0] <= x1 and y0 <= t.pos[1] and t.pos[1] + t.h <= y1 for t in by("step_no"))
+    over = []
+    for t in texts:
+        if t.tag in ("step_no", "cut_label") or t.tag.startswith("dim_"):
+            continue
+        if any(_hits_text(t, g, v_hi=1.45 if any(ord(c) > 127 for c in t.s) else 1.05) for g in lines):
+            over.append(t.s)
+    C.add(1, "1.17", "chữ: cao ≥ 2,0 mm giấy; số bậc nằm trong hình chữ nhật mặt bằng; chữ (trừ số bậc/kích thước) không đè lên nét nào", not small and inside and not over,
+          f"{len(texts)} chữ; quá nhỏ: {small[:3]}; số bậc trong hình: {inside}; chữ đè nét: {over[:3]}")
+    # ---- 1.18
+    X = expected_texts(sp)
+    ox, oy = M["section_origin"]
+    lv = [p for p in by("level_line") if isinstance(p, Line)]
+    lt = by("level_text")
+    pair_bad = []
+    for z, lab in ((0.0, X["levels"][0]), (H, X["levels"][1])):
+        ys = [p.p1[1] for p in lv if abs((p.p1[1] - oy) * s - z) < 1e-3]
+        if len(ys) != 1 or not lt:
+            pair_bad.append((lab, "không có đúng một đường"))
+            continue
+        near = min(lt, key=lambda t: abs(t.pos[1] - ys[0]))
+        if near.s != lab:
+            pair_bad.append((lab, near.s))
+    fl, fu = by("floor_lower"), by("floor_upper")
+    stub_ok = (len(fl) == 1 and len(fu) == 1 and abs(fl[0].p2[0] - ox) < 1e-6 and abs(fl[0].p1[1] - oy) < 1e-6 and fl[0].p1[0] < ox - 1.0
+               and abs(fu[0].p1[0] - (ox + L / s)) < 1e-6 and abs(fu[0].p1[1] - (oy + H / s)) < 1e-6 and fu[0].p2[0] > fu[0].p1[0] + 1.0)
+    tri, bar = by("level_tri"), by("level_bar")
+    sym_ok = (len(tri) == 4 and len(bar) == 2 and all(any(abs(t.p1[1] - y) < 1e-6 for t in tri) for y in (oy, oy + H / s))
+              and all(any(abs(x.p1[1] - y - 3.0) < 1e-6 for x in bar) for y in (oy, oy + H / s)))
+    C.add(1, "1.18", "cao độ: mỗi chữ cao độ nằm sát đúng đường của nó; sàn dưới/trên có đoạn nét đậm tại z = 0 / z = cao_tang; mỗi mức có ký hiệu (2 nét tam giác + thanh)",
+          not pair_bad and stub_ok and sym_ok, f"gắn nhầm: {pair_bad}; đoạn sàn {stub_ok}; ký hiệu {len(tri)} nét tam giác, {len(bar)} thanh: {sym_ok}")
+    # ---- 1.19
+    got = sorted(t.s for t in D.prims if isinstance(t, Text) and t.tag.startswith("dim_") and t.tag.endswith("_text"))
+    want = []
+    for d in D.dims:
+        if d.view == "plan" and d.role == "single" and d.kind == "h" and d.text and " x " in d.text:
+            want.append(f"{n - 1} x {round(b):d} = {round(L):d}")
+        else:
+            want.append(_label_of(d.value))
+    C.add(1, "1.19", "mọi chữ kích thước in ra đúng giá trị của kích thước (nguyên mm, hoặc 1 số lẻ dấu phẩy khi không nguyên; chuỗi gộp 'n x b = L')", got == sorted(want), f"in {got}; cần {sorted(want)}")
 
 
 def check_layout_a(C: Checks, D, sp):

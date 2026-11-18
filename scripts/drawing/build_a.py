@@ -108,12 +108,21 @@ def section_block(sp: dict, s: int):
     # dimensions
     h_txt = fmt_value(h) if _is_int(h) else fmt_dec(h, 1)
     b_fits = est_width(fmt_value(b), cap_to_em(P["cao_chu_kich_thuoc"])) <= X(b) - P["kt_mui_ten"] - 1.0
-    dims.append(Dim(kind="h", p1=(X(0.0), X(h)), p2=(X(b), X(h)), line_pos=X(2 * h) + 8.0, value=b, ext_from=X(2 * h), layer=LAYER_DIM, role="single", text=fmt_value(b),
-                    text_side=not b_fits, view="section"))
+    exo, exe = P["kt_exo"], P["kt_exe"]
+    yb = X(2 * h) + 8.0
+    dims.append(Dim(kind="h", p1=(X(0.0), X(h)), p2=(X(b), X(h)), line_pos=yb, value=b, ext_from=X(2 * h), layer=LAYER_DIM, role="single", text=fmt_value(b),
+                    ext_lines=False, text_side=not b_fits, view="section"))
+    # hand-made extension lines: they start at the measured points (start of tread 1 on the nosing line; top of riser 2), not floating above
+    add(Line(layer=LAYER_DIM, tag="dim_single_ext", p1=(X(0.0), X(h) + exo), p2=(X(0.0), yb + exe)))
+    add(Line(layer=LAYER_DIM, tag="dim_single_ext", p1=(X(b), X(2 * h) + exo), p2=(X(b), yb + exe)))
     # the riser-height label goes beside the dimension line when it does not fit between the two ticks (it used to run over a tick / extension line)
     h_fits = est_width(h_txt, cap_to_em(P["cao_chu_kich_thuoc"])) <= X(h) - P["kt_mui_ten"] - 1.0
-    dims.append(Dim(kind="v", p1=(X(L), X((n - 2) * h)), p2=(X(L), X((n - 1) * h)), line_pos=X(L) + 8.0, value=h, ext_from=X(L), layer=LAYER_DIM, role="single", text=h_txt,
-                    text_side=not h_fits, view="section"))
+    xh = X(L) + 8.0
+    dims.append(Dim(kind="v", p1=(X(L), X((n - 2) * h)), p2=(X(L), X((n - 1) * h)), line_pos=xh, value=h, ext_from=X(L), layer=LAYER_DIM, role="single", text=h_txt,
+                    ext_lines=False, text_side=not h_fits, view="section"))
+    # upper point: foot of the last riser; lower point: end of tread n-2 (the extension line runs below the stringer to the dimension line)
+    add(Line(layer=LAYER_DIM, tag="dim_single_ext", p1=(X(L) + exo, X((n - 1) * h)), p2=(xh + exe, X((n - 1) * h))))
+    add(Line(layer=LAYER_DIM, tag="dim_single_ext", p1=(X((n - 2) * b) + exo, X((n - 2) * h)), p2=(xh + exe, X((n - 2) * h))))
     ext_h = X(L) + stub + EXT
     dims.append(Dim(kind="v", p1=(X(L), 0.0), p2=(X(L), X(H)), line_pos=ext_h + 8.0, value=H, ext_from=ext_h, layer=LAYER_DIM, role="overall", text=fmt_value(H), view="section"))
     dims.append(Dim(kind="h", p1=(X(0.0), X(H)), p2=(X(L), X(H)), line_pos=X(H) + 10.0, value=L, ext_from=X(H), layer=LAYER_DIM, role="overall", text=fmt_value(L), view="section"))
