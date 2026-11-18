@@ -42,6 +42,7 @@ for _k in range(7):
     top = 16 + 7 * _k
     FIELDS[f"row{_k + 1}_role"] = (None, 15, top + 4.8, 2.5, False, 27)
     FIELDS[f"row{_k + 1}_name"] = (None, 75, top + 4.8, 2.5, False, 27)
+    FIELDS[f"row{_k + 1}_date"] = (None, 45, top + 4.8, 2.5, False, 27)          # middle column (signature column) carries the signing date
 CAPTIONS = [("3", 1.5, 3.4, "Tên bản vẽ"), ("7", 1.5, 3.4, "Tỷ lệ"), ("5", 1.5, 3.4, "Loại hồ sơ"), ("4", 1.5, 3.4, "Số hiệu")]
 CAP_SIZE = 2.5
 
@@ -100,6 +101,8 @@ def fields_from_meta(meta: dict, scale_text: str) -> dict:
     for k, row in enumerate(meta.get("ky") or [], start=1):
         put(f"row{k}_role", row.get("chuc_danh", ""), f"khung_ten.ky[{k - 1}].chuc_danh")
         put(f"row{k}_name", row.get("ho_ten", ""), f"khung_ten.ky[{k - 1}].ho_ten")
+        if row.get("ngay"):
+            put(f"row{k}_date", row["ngay"], f"khung_ten.ky[{k - 1}].ngay")
     if errs:
         raise SpecError(errs)
     return {k: v for k, v in f.items() if v}

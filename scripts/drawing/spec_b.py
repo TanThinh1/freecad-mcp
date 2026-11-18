@@ -40,6 +40,8 @@ SECTION_ERR = "tiet_dien_cot = %r không đọc được. Dạng hợp lệ: H30
 _CTRL = re.compile("[\x00-\x1f\x7f\ud800-\udfff]")
 _NAME = re.compile(r"[A-Za-z0-9_\-]{1,64}")
 ROLE_KEYS = (("chu_tri", "Chủ trì"), ("kiem_tra", "Kiểm tra"), ("thiet_ke", "Thiết kế"))
+# Names used ONLY when the spec says nothing about signatures (demo sample, obviously placeholder text); khung_ten.ky_mau = false switches the sample off.
+SAMPLE_NAMES = {"chu_tri": "NGUYỄN VĂN A", "kiem_tra": "TRẦN VĂN B", "thiet_ke": "LÊ VĂN C"}
 TEXT_FIELDS = ("don_vi_tk", "cong_trinh", "chu_dau_tu", "ten_ban_ve", "ky_hieu_ban_ve", "loai_ho_so", "ngay", "o15")
 
 
@@ -157,6 +159,20 @@ def parse_khung_ten(kt_in, errors) -> dict:
         for i, r in enumerate(ky_in):
             ky.append(dict(chuc_danh=_text(r.get("chuc_danh"), f"khung_ten.ky[{i}].chuc_danh", errors),
                            ho_ten=_text(r.get("ho_ten"), f"khung_ten.ky[{i}].ho_ten", errors)))
+    ky_mau = kt_in.get("ky_mau", True)
+    if not isinstance(ky_mau, bool):
+        errors.append(f"khung_ten.ky_mau = {ky_mau!r} phải là true hoặc false (false: không điền tên mẫu vào khung tên).")
+        ky_mau = True
+    source = "spec" if (roles or ky) else "khong"
+    if ky_mau and not roles and not ky and not any(k in kt_in for k, _ in ROLE_KEYS):
+        roles = [dict(chuc_danh=label, ho_ten=SAMPLE_NAMES[k], mau=True) for k, label in ROLE_KEYS]          # default: role labels + sample names
+        source = "mac_dinh"
+    sign_date = kt.get("ngay") or datetime.date.today().strftime("%d/%m/%Y")
+    for r in roles + ky:
+        if r.get("ho_ten"):
+            r["ngay"] = sign_date                                    # signed rows carry the drawing date (default: today)
+    kt["ky_mau"] = ky_mau
+    kt["ky_nguon"] = source
     kt["ky"] = roles + ky
     return kt
 

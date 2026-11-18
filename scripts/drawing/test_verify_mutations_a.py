@@ -278,6 +278,37 @@ def main():
         t = [p for p in Dm.prims if p.tag == "step_no" and p.s == "10"][0]
         t.pos = (t.pos[0] + 2.2, t.pos[1])
     need({"1.5", "1.22"}, prim_check(mut(one_number_shifted_into_tread_line), sp1), "prim_step_number_10_shifted_2.2mm_towards_a_tread_line")
+    # (12) item 1: title block, left block rows (role labels + sample names + date by default)
+    def title_check(Dm, spx):
+        C_ = verify.Checks()
+        verify.check_title_rows(C_, Dm, spx)
+        return failed(C_)
+    expect("control_title_rows_default_sample_names", not title_check(D1, sp1) and sp1["khung_ten"]["ky_nguon"] == "mac_dinh" and len([k for k in D1.fields if k.endswith("_role")]) == 3,
+           f"không đạt: {sorted(title_check(D1, sp1))}; nguồn {sp1['khung_ten']['ky_nguon']}")
+    def drop_role_text(Dm):
+        Dm.prims.remove([p for p in Dm.prims if p.tag == "tb_text" and p.s == "Kiểm tra"][0])
+    need({"1.30"}, title_check(mut(drop_role_text), sp1), "title_role_label_missing_in_primitives")
+    def blank_field(Dm):
+        Dm.fields.pop("row2_name")
+    need({"1.30"}, title_check(mut(blank_field), sp1), "title_row_name_field_blank")
+    def wrong_date(Dm):
+        Dm.fields["row1_date"] = "01/01/2020"
+    need({"1.30"}, title_check(mut(wrong_date), sp1), "title_row_date_not_the_drawing_date")
+    def text_outside_left_block(Dm):
+        t = [p for p in Dm.prims if p.tag == "tb_text" and p.s == "NGUYỄN VĂN A"][0]
+        t.pos = (t.pos[0] + 100.0, t.pos[1])
+    need({"1.30"}, title_check(mut(text_outside_left_block), sp1), "title_row_text_moved_out_of_the_left_block")
+    raw_off = load_spec(os.path.join(EX, "a1_3600x20.json"))
+    raw_off["khung_ten"]["ky_mau"] = False
+    sp_off = validate(raw_off)
+    D_off = build(sp_off, profile)
+    expect("title_rows_blank_when_ky_mau_false", not title_check(D_off, sp_off) and not [k for k in D_off.fields if k.startswith("row")], f"nguồn {sp_off['khung_ten']['ky_nguon']}; ô {[k for k in D_off.fields if k.startswith('row')]}")
+    raw_named = load_spec(os.path.join(EX, "a1_3600x20.json"))
+    raw_named["khung_ten"].update(thiet_ke="PHẠM THỊ D")
+    sp_n = validate(raw_named)
+    D_n = build(sp_n, profile)
+    expect("title_rows_follow_the_spec_when_given", not title_check(D_n, sp_n) and D_n.fields.get("row1_name") == "PHẠM THỊ D" and D_n.fields.get("row1_role") == "Thiết kế" and len([k for k in D_n.fields if k.endswith("_role")]) == 1,
+           f"ô {[(k, v) for k, v in D_n.fields.items() if k.startswith('row')]}")
     # a spec that disagrees with the (correct) drawing must fail too: b changed in the spec only
     sp_b = dict(sp1, b=260)
     need({"1.2", "1.3", "1.4"}, prim_check(D1, sp_b), "spec_b_260_vs_drawing_b_250")

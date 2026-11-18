@@ -507,6 +507,40 @@ def check_pdf(C: Checks, D, sp, dx: dict, pdf: str, png: str | None, profile: di
     return a
 
 
+def check_title_rows(C: Checks, D, sp):
+    """1.30: left block of the title block (cells 8-14). Default (the spec says nothing about signatures): the three role labels with the sample names and the
+    drawing date; otherwise exactly the rows of the spec; every printed text lies inside the left block (x 0..90, rows area 49 mm high)."""
+    kt = sp["khung_ten"]
+    rows = kt.get("ky", [])
+    sh = SHEETS[D.sheet]
+    exp = {}
+    if kt.get("ky_nguon") == "mac_dinh":
+        sample = [("Chủ trì", "NGUYỄN VĂN A"), ("Kiểm tra", "TRẦN VĂN B"), ("Thiết kế", "LÊ VĂN C")]
+        ok_rows = [(r["chuc_danh"], r["ho_ten"]) for r in rows] == sample
+    else:
+        ok_rows = True
+    date = kt.get("ngay") or None
+    for k, r in enumerate(rows, start=1):
+        exp[f"row{k}_role"] = r["chuc_danh"]
+        if r.get("ho_ten"):
+            exp[f"row{k}_name"] = r["ho_ten"]
+            exp[f"row{k}_date"] = r.get("ngay", "")
+    got = {k: v for k, v in D.fields.items() if k.startswith("row")}
+    fields_ok = got == {k: v for k, v in exp.items() if v}
+    date_ok = all(re.fullmatch(r"\d\d/\d\d/\d{4}", v) and (date is None or v == date) for k, v in got.items() if k.endswith("_date"))
+    left = [p for p in D.prims if isinstance(p, Text) and p.tag == "tb_text" and sh.tb_x0 <= p.pos[0] <= sh.tb_x0 + 90 and sh.tb_y1 - 16 - 49 <= p.pos[1] <= sh.tb_y1 - 16]
+    inside = True
+    printed_ok = len(left) == len(got)                      # exactly the expected texts are printed in the left block, nothing else
+    for name, val in got.items():
+        ax, ay = TBK.field_anchor(name, sh)
+        printed_ok &= any(p.s == val and close(p.pos[0], ax, 1e-6) and close(p.pos[1], ay, 1e-6) for p in left)
+    nonempty_roles = sum(1 for k, v in got.items() if k.endswith("_role") and v)
+    default_filled = kt.get("ky_nguon") != "mac_dinh" or nonempty_roles == 3
+    C.add(1, "1.30", "khung tên, khối trái (ô 8-14): mặc định có 3 nhãn chức danh + tên mẫu + ngày của bản vẽ; khi spec nêu thì đúng theo spec; mọi chữ nằm trong khối trái",
+          ok_rows and fields_ok and date_ok and inside and printed_ok and default_filled,
+          f"nguồn {kt.get('ky_nguon')}; {nonempty_roles} hàng có nhãn; ô {got}; đủ chữ trong khung tên {printed_ok}; nằm trong khối trái {inside}")
+
+
 def run_all(D, sp, profile, files: dict, do_fc=True, do_dwg=True, do_pdf=True, dwg_info=None, model3d=None):
     C = Checks()
     if D.kind == "A":
@@ -517,6 +551,7 @@ def run_all(D, sp, profile, files: dict, do_fc=True, do_dwg=True, do_pdf=True, d
         verify_c.check_primitives_c(C, D, sp)
     else:
         check_primitives_b(C, D, sp)
+    check_title_rows(C, D, sp)
     dx = check_dxf(C, D, sp, profile, files["dxf"], do_fc)
     if do_dwg:
         check_dwg(C, D, dx, files["dwg"], files.get("work") or os.path.dirname(files["dxf"]), dwg_info or {})
