@@ -196,13 +196,17 @@ def validate(spec) -> dict:
             errors.append(f"buoc_cot = {buoc:g} mm không lớn hơn bề rộng cột b = {sec['b']:g} mm: các cột chồng lên nhau.")
         if nhip and nhip <= sec["h"]:
             errors.append(f"nhip = {nhip:g} mm không lớn hơn chiều cao tiết diện cột h = {sec['h']:g} mm.")
+    gom = spec.get("gom_nhan_tiet_dien", True)
+    if not isinstance(gom, bool):
+        errors.append(f"gom_nhan_tiet_dien = {gom!r} phải là true hoặc false (true: một nhãn tiết diện + chú thích \"TẤT CẢ CỘT\"; false: nhãn ở mọi cột).")
+        gom = True
     ty_le, scale = parse_scale(spec.get("ty_le", "auto"), errors)
     ten = parse_ten(spec.get("ten"), errors)
     kt = parse_khung_ten(spec.get("khung_ten") or {}, errors)
     params = parse_params(spec.get("tham_so") or {}, DEFAULT_PARAMS, errors)
     if errors:
         raise SpecError(errors)
-    return dict(loai="B", ten=ten, nhip=nhip, dai_nha=dai, buoc_cot=buoc, so_truc_doc=N, section=sec, ty_le=ty_le, scale=scale, khung_ten=kt, params=params)
+    return dict(loai="B", ten=ten, gom_nhan_tiet_dien=gom, nhip=nhip, dai_nha=dai, buoc_cot=buoc, so_truc_doc=N, section=sec, ty_le=ty_le, scale=scale, khung_ten=kt, params=params)
 
 
 def load_spec(path: str) -> dict:

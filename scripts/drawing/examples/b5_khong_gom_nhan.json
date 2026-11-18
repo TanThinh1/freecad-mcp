@@ -1,0 +1,21 @@
+{
+  "loai": "B",
+  "ten": "b5_khong_gom_nhan",
+  "nhip": 12000,
+  "dai_nha": 30000,
+  "buoc_cot": 6000,
+  "tiet_dien_cot": "H250x125x6x9",
+  "ty_le": "auto",
+  "khung_ten": {
+    "don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP",
+    "cong_trinh": "NHÀ KHO TIỀN CHẾ",
+    "chu_dau_tu": "CÔNG TY TNHH THƯƠNG MẠI ABC",
+    "ten_ban_ve": "MẶT BẰNG LƯỚI TRỤC VÀ CỘT",
+    "loai_ho_so": "BVTC",
+    "ngay": "18/11/2026",
+    "chu_tri": true,
+    "kiem_tra": true,
+    "thiet_ke": true
+  },
+  "gom_nhan_tiet_dien": false
+}

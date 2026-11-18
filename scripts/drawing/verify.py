@@ -104,6 +104,7 @@ def check_primitives_b(C: Checks, D, sp):
     s = D.scale
     P = D.info["params"]
     b, h = sp["section"]["b"], sp["section"]["h"]
+    sec_text = sp["section"]["text"]
     N, nhip, dai, buoc = sp["so_truc_doc"], sp["nhip"], sp["dai_nha"], sp["buoc_cot"]
     ov = P["truc_vuon_qua"]
     av, ah, cols = D.by_tag("axis_v"), D.by_tag("axis_h"), D.by_tag("column")
@@ -145,6 +146,16 @@ def check_primitives_b(C: Checks, D, sp):
     labels = sorted(p.s for p in D.by_tag("bubble_text"))
     wantl = sorted([str(i + 1) for i in range(N)] + ["A", "B"])
     C.add(1, "1.13", "ký hiệu trục: 1..N và A, B", labels == wantl, f"{len(labels)} vòng: {', '.join(wantl)}")
+    labs, notes = D.by_tag("col_label"), D.by_tag("col_note")
+    want_note = f"TẤT CẢ CỘT: {sec_text}"
+    if sp.get("gom_nhan_tiet_dien", True):
+        ok14 = len(labs) == 1 and labs[0].s == sec_text and len(notes) == 1 and notes[0].s == want_note and any(
+            close(((c.p0[0] + c.p1[0]) / 2 - ox) * s, 0.0, 1e-3) and close(((c.p0[1] + c.p1[1]) / 2 - oy) * s, 0.0, 1e-3) for c in cols if abs(labs[0].pos[0] - c.p1[0] - 2.0) < 1e-6)
+        d14 = f"gom nhãn: {len(labs)} nhãn {[t.s for t in labs]} (cần 1, ở cột 1/A), chú thích {[t.s for t in notes]} (cần {want_note!r})"
+    else:
+        ok14 = len(labs) == 2 * N and all(t.s == sec_text for t in labs) and not notes
+        d14 = f"không gom: {len(labs)} nhãn (cần {2 * N}), chú thích {len(notes)} (cần 0)"
+    C.add(1, "1.14", "nhãn tiết diện: gom (1 nhãn ở cột 1/A + chú thích 'TẤT CẢ CỘT: …') hoặc không gom (nhãn ở mọi cột)", ok14, d14)
     check_expressions(C, [p.s for p in D.prims if isinstance(p, Text)], 1, "1.20", "chữ trên bản vẽ")
 
 

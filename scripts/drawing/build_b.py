@@ -20,6 +20,10 @@ DEFAULT_SHEET_NO = "KC-01"       # drawing number used when khung_ten.ky_hieu_ba
 NEEDED_LAYERS = (LAYER_AXIS, LAYER_BUBBLE, LAYER_COLUMN, LAYER_DIM, LAYER_TEXT, "KHUNG-TEN", "NET-MANH")
 
 
+def note_text(sec: dict) -> str:
+    return f"TẤT CẢ CỘT: {sec['text']}"
+
+
 def label_width(sec: dict, P: dict) -> float:
     """Estimated paper width of the column section label (Arial, cap height cao_chu_nhan)."""
     return TBK.est_width(sec["text"], cap_to_em(P["cao_chu_nhan"]))
@@ -32,13 +36,13 @@ def span_offset(P: dict, label_w: float) -> float:
     return max(P["kt_dau_tien"], label_w + 4.0 - P["truc_vuon_qua"])
 
 
-def margins_paper(P: dict, label_w: float = 0.0):
+def margins_paper(P: dict, label_w: float = 0.0, extra_bottom: float = 0.0):
     """Paper mm reserved around the column bounding box: (left, right, bottom, top)."""
     ov, gap, dia = P["truc_vuon_qua"], P["khe_vong_truc"], P["duong_kinh_vong_truc"]
     bubble = ov + gap + dia
     right = ov + span_offset(P, label_w) + P["kt_exe"]
     bottom = (ov + P["kt_dau_tien"] + P["kt_giua_cac_duong"] + P["kt_exe"] + P["khoang_tieu_de"] + P["cao_chu_tieu_de"]
-              + P["khoang_ghi_chu"] + P["cao_chu_ghi_chu"] * ARIAL_CAP)
+              + P["khoang_ghi_chu"] + P["cao_chu_ghi_chu"] * ARIAL_CAP + extra_bottom)
     return bubble, right, bottom, bubble
 
 
@@ -50,8 +54,9 @@ def build(sp: dict, profile: dict) -> Drawing:
     b, h = sec["b"], sec["h"]
     nhip, dai, buoc, N = sp["nhip"], sp["dai_nha"], sp["buoc_cot"], sp["so_truc_doc"]
     bbox = (dai + b, nhip + h)
-    lw_lab = label_width(sec, P)
-    mg = margins_paper(P, lw_lab)
+    gom = sp["gom_nhan_tiet_dien"]
+    lw_lab = 0.0 if gom else label_width(sec, P)           # grouped: the only label is on the first column, nothing to clear on the right
+    mg = margins_paper(P, lw_lab, extra_bottom=(2.0 + P["cao_chu_ghi_chu"]) if gom else 0.0)
     gap = P["khe_vung_ve"]
 
     # ---- scale
@@ -94,7 +99,8 @@ def build(sp: dict, profile: dict) -> Drawing:
         for j, y in enumerate(ys):
             D.add(Rect(layer=LAYER_COLUMN, tag="column", p0=(x - hx, y - hy), p1=(x + hx, y + hy)))
             # label starts 2 mm to the right of the column's right edge, just above the horizontal axis
-            D.add(Text(layer=LAYER_TEXT, tag="col_label", s=sec["text"], pos=(x + hx + 2.0, y + 1.2), h=P["cao_chu_nhan"]))
+            if not gom or (i == 0 and j == 0):
+                D.add(Text(layer=LAYER_TEXT, tag="col_label", s=sec["text"], pos=(x + hx + 2.0, y + 1.2), h=P["cao_chu_nhan"]))
     # ---- axes + bubbles
     y_bot, y_top = ys[0] - hy - ov, ys[1] + hy + ov
     for i, x in enumerate(xs):
@@ -132,6 +138,9 @@ def build(sp: dict, profile: dict) -> Drawing:
     D.add(Text(layer=LAYER_TEXT, tag="title", s=VIEW_TITLE, pos=(xc, t_base), h=cap_t, halign="center", bold=True))
     n_base = t_base - P["khoang_ghi_chu"] - P["cao_chu_ghi_chu"] * ARIAL_CAP
     D.add(Text(layer=LAYER_TEXT, tag="scale_note", s=f"TỶ LỆ 1:{s}", pos=(xc, n_base), h=P["cao_chu_ghi_chu"], halign="center"))
+    if gom:
+        n_base = n_base - 2.0 - P["cao_chu_ghi_chu"]
+        D.add(Text(layer=LAYER_TEXT, tag="col_note", s=note_text(sec), pos=(xc, n_base), h=P["cao_chu_ghi_chu"], halign="center"))
 
     # ---- frame + title block (sheet=True: DXF only; PDF takes them from the template)
     meta = dict(sp["khung_ten"])

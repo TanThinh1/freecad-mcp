@@ -111,6 +111,22 @@ def main():
     C = verify.Checks()
     verify.check_primitives(C, D, sp2)
     expect("prim_bubble_wrong_diameter", "1.8" in failed(C), f"không đạt: {sorted(failed(C))}")
+    # grouped section labels (gom_nhan_tiet_dien): one label + the note "TẤT CẢ CỘT: ..."
+    D = copy.deepcopy(D2)
+    D.prims.remove(D.by_tag("col_note")[0])
+    C = verify.Checks()
+    verify.check_primitives(C, D, sp2)
+    expect("prim_group_note_deleted", "1.14" in failed(C), f"không đạt: {sorted(failed(C))}")
+    D = copy.deepcopy(D2)
+    D.by_tag("col_note")[0].s = "TẤT CẢ CỘT: H300x150x6x9"
+    C = verify.Checks()
+    verify.check_primitives(C, D, sp2)
+    expect("prim_group_note_wrong_section", "1.14" in failed(C), f"không đạt: {sorted(failed(C))}")
+    D = copy.deepcopy(D2)
+    D.prims.append(copy.deepcopy(D.by_tag("col_label")[0]))
+    C = verify.Checks()
+    verify.check_primitives(C, D, sp2)
+    expect("prim_group_extra_label", "1.14" in failed(C), f"không đạt: {sorted(failed(C))}")
 
     # ---- PDF near-miss: expected geometry shifted 0.3 mm paper (PDF itself is the correct one)
     for name, Dm, ids in (("pdf_column_shifted_0.3mm", shifted(D2, 0.3), {"5.1"}),
