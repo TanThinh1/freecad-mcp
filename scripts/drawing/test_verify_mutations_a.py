@@ -240,7 +240,6 @@ def main():
             if p.tag.startswith("stringer_"):
                 p.layer = "KEO"
     need({"1.21"}, prim_check(mut(stringer_on_keo), sp1), "prim_stringer_on_layer_KEO")
-    need({"2.5", "2.7"}, dxf_of(mut(stringer_on_keo), "dxf_stringer_on_keo"), "dxf_stringer_on_layer_KEO")
     # a spec that disagrees with the (correct) drawing must fail too: b changed in the spec only
     sp_b = dict(sp1, b=260)
     need({"1.2", "1.3", "1.4"}, prim_check(D1, sp_b), "spec_b_260_vs_drawing_b_250")
@@ -254,6 +253,7 @@ def main():
         return failed(C)
 
     need({"2.7", "2.9", "2.5"}, dxf_of(mut(wrong_h), "dxf_wrong_h"), "dxf_wrong_h_one_riser")
+    need({"2.5", "2.7"}, dxf_of(mut(stringer_on_keo), "dxf_stringer_on_keo"), "dxf_stringer_on_layer_KEO")
     need({"2.7", "2.9"}, dxf_of(mut(wrong_b), "dxf_wrong_b"), "dxf_wrong_b_tread")
     need({"2.7", "2.9"}, dxf_of(mut(wrong_level), "dxf_wrong_level"), "dxf_level_line_off")
     need({"2.6", "2.8", "2.9"}, dxf_of(mut(wrong_note), "dxf_wrong_note"), "dxf_note_text_wrong")
