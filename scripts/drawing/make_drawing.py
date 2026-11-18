@@ -134,7 +134,8 @@ def make(spec_path: str, out_root: str, profile_path: str | None, do_pdf=True, d
     outdir = os.path.join(out_root, name)
     work = os.path.join(outdir, "_work")
     os.makedirs(work, exist_ok=True)
-    res.update(name=name, scale=D.scale, reason=D.info["reason"], band=D.info["band"], N=D.info["N"], columns=D.info["n_columns"])
+    res.update(name=name, scale=D.scale, scale_plan=D.info.get("scale_plan", D.scale), layout=D.info.get("layout"), reason=D.info["reason"], band=D.info["band"],
+               N=D.info["N"], columns=D.info["n_columns"])
     files = dict(dxf=os.path.join(outdir, f"{name}.dxf"), dwg=os.path.join(outdir, f"{name}.dwg"), pdf=os.path.join(outdir, f"{name}.pdf"), png=os.path.join(outdir, f"{name}.png"))
     _rm(files["dxf"], files["dwg"], files["png"])
     skipped = []
@@ -211,7 +212,8 @@ def print_result(r: dict):
         for e in r.get("errors", []):
             print("  LỖI:", e)
         return
-    print(f"  tỷ lệ 1:{r['scale']} - {r['reason']}")
+    sc = f"1:{r['scale']}" if r.get("scale_plan", r["scale"]) == r["scale"] else f"mặt cắt 1:{r['scale']}, mặt bằng 1:{r['scale_plan']}"
+    print(f"  tỷ lệ {sc}" + (f", bố cục {r['layout']}" if r.get("layout") else "") + f" - {r['reason']}")
     print("  thời gian: " + ", ".join(f"{k} {v:.1f}s" for k, v in r["timings"].items()))
     for k, v in r.get("stages", {}).items():
         if v != "ok":

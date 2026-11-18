@@ -6,9 +6,13 @@ from __future__ import annotations
 
 import math
 
-from primitives import Circle, Line, Rect, Text, fmt_dec
+import re
+
+from primitives import Circle, Line, Rect, Text, expand_dim, fmt_dec, prim_bbox
+from scale import SCALES
+from tcvn import FRAME_X0, FRAME_X1, FRAME_Y0, FRAME_Y1, TB_X0, TB_Y1
 from readers import f
-from verify import Checks, close, greedy_match
+from verify import Checks, check_expressions, close, greedy_match
 
 TOL = 1e-6
 TOL_DXF = 1e-3
@@ -19,12 +23,19 @@ def _hl(h: float) -> str:
     return f"{round(h):d}" if abs(h - round(h)) < 1e-9 else f"{h:.1f}".replace(".", ",")
 
 
+def _height_note(n: int, H: float, h: float) -> str:
+    """Integer h: 'n x h = H' (exact product); otherwise the division form, never 'n x rounded h = H' (which would be a false equation)."""
+    if abs(h - round(h)) < 1e-9:
+        return f"{n} x {round(h):d} = {round(H):d}"
+    return f"{n} BẬC: h = {round(H):d}/{n} ≈ {f'{h:.1f}'.replace('.', ',')} MM"
+
+
 def expected_texts(sp: dict) -> dict:
     n, H, b, t = sp["so_bac"], sp["cao_tang"], sp["b"], sp["t"]
     h, L = H / n, (n - 1) * b
     th = math.degrees(math.atan(h / b))
     return dict(
-        notes=[f"THÉP TẤM DÀY {f'{t:g}'.replace('.', ',')} MM", f"{n} x {_hl(h)} = {round(H):d}", f"{n - 1} x {round(b):d} = {round(L):d}"],
+        notes=[f"THÉP TẤM DÀY {f'{t:g}'.replace('.', ',')} MM", _height_note(n, H, h), f"{n - 1} x {round(b):d} = {round(L):d}"],
         angle=f"GÓC DỐC {f'{th:.1f}'.replace('.', ',')}°", levels=["+0.000", f"+{H / 1000:.3f}"], h_label=_hl(h), steps=[str(i) for i in range(1, n)])
 
 
@@ -40,17 +51,19 @@ def _same_seg(a, b, tol):
 
 # ------------------------------------------------------------------ 1. primitives
 def check_primitives_a(C: Checks, D, sp):
-    s = D.scale
     M = D.meta
+    s = D.view_scale("section")           # section scale (= sheet scale: the DXF section is real size)
+    sp_ = D.view_scale("plan")            # plan scale (>= section scale)
     ox, oy = M["section_origin"]
     px, py = M["plan_origin"]
     n, H, b, w, t = sp["so_bac"], sp["cao_tang"], sp["b"], sp["w"], sp["t"]
     h, L = H / n, (n - 1) * b
     ds = sp["dam_con"]
     R = lambda p: ((p[0] - ox) * s, (p[1] - oy) * s)          # section: real (x, z)
-    PL = lambda p: ((p[0] - px) * s, (p[1] - py) * s)         # plan: real (x, y)
+    PL = lambda p: ((p[0] - px) * sp_, (p[1] - py) * sp_)     # plan: real (x, y)
     by = lambda tag: [p for p in D.prims if p.tag == tag]
     ln = lambda p: math.hypot(p.p2[0] - p.p1[0], p.p2[1] - p.p1[1]) * s
+    lnp = lambda p: math.hypot(p.p2[0] - p.p1[0], p.p2[1] - p.p1[1]) * sp_
     ris, tre = by("riser"), by("tread")
     ok1 = len(ris) == n and all(close(ln(r), h, TOL) for r in ris) and close(sum(ln(r) for r in ris), H, TOL)
     C.add(1, "1.1", "chiều cao bậc: mỗi riser dài H/so_bac và tổng h × so_bac = cao_tang (sai số ≤ 1e-6 mm)", ok1,
@@ -62,11 +75,11 @@ def check_primitives_a(C: Checks, D, sp):
     n_ok, miss = greedy_match(exp_r + exp_t, got, lambda e, g: _same_seg(e, g, TOL))
     C.add(1, "1.3", "đỉnh răng cưa từng bậc: mọi đoạn riser/mặt bậc đúng vị trí theo công thức ((i−1)b, i·h)", n_ok == len(exp_r) + len(exp_t) == len(got), f"{n_ok}/{len(exp_r) + len(exp_t)} đoạn đúng vị trí; thiếu {miss[:2]}")
     outline = by("plan_outline")
-    ok4 = len(outline) == 1 and close((outline[0].p1[0] - outline[0].p0[0]) * s, L, TOL) and close((outline[0].p1[1] - outline[0].p0[1]) * s, w, TOL) and close(outline[0].p0[0], ox, 1e-9)
+    ok4 = len(outline) == 1 and close((outline[0].p1[0] - outline[0].p0[0]) * sp_, L, TOL) and close((outline[0].p1[1] - outline[0].p0[1]) * sp_, w, TOL) and close(outline[0].p0[0], px, 1e-9)
     tl = by("plan_tread_line")
-    n_t, _ = greedy_match([i * b for i in range(1, n - 1)], tl, lambda e, g: close(PL(g.p1)[0], e, TOL) and close(PL(g.p2)[0], e, TOL) and close(ln(g), w, TOL))
-    C.add(1, "1.4", "mặt bằng: dài (so_bac − 1) × b, rộng w, thẳng hàng với mặt cắt; n − 2 đường mặt bậc đúng vị trí", ok4 and n_t == n - 2 == len(tl),
-          f"dài {(outline[0].p1[0] - outline[0].p0[0]) * s:.3f} (cần {L:g}), rộng {(outline[0].p1[1] - outline[0].p0[1]) * s:.3f} (cần {w:g}); {n_t}/{n - 2} đường mặt bậc" if outline else "không có hình chữ nhật mặt bằng")
+    n_t, _ = greedy_match([i * b for i in range(1, n - 1)], tl, lambda e, g: close(PL(g.p1)[0], e, TOL) and close(PL(g.p2)[0], e, TOL) and close(lnp(g), w, TOL))
+    C.add(1, "1.4", "mặt bằng (theo tỷ lệ riêng của hình): dài (so_bac − 1) × b, rộng w; n − 2 đường mặt bậc đúng vị trí", ok4 and n_t == n - 2 == len(tl),
+          f"dài {(outline[0].p1[0] - outline[0].p0[0]) * sp_:.3f} (cần {L:g}), rộng {(outline[0].p1[1] - outline[0].p0[1]) * sp_:.3f} (cần {w:g}); {n_t}/{n - 2} đường mặt bậc" if outline else "không có hình chữ nhật mặt bằng")
     X = expected_texts(sp)
     steps = by("step_no")
     n_s, _ = greedy_match([(str(i), (i - 0.5) * b) for i in range(1, n)], steps, lambda e, g: g.s == e[0] and close(PL(g.pos)[0], e[1], TOL))
@@ -94,7 +107,7 @@ def check_primitives_a(C: Checks, D, sp):
         exp_v += [("h", b)] * (n - 1) + [("h", L)]
     got_v = [(d.kind, d.value) for d in D.dims]
     n_d, miss_d = greedy_match(exp_v, got_v, lambda e, g: e[0] == g[0] and close(e[1], g[1], TOL))
-    geo_ok = all(close((abs(d.p2[0] - d.p1[0]) if d.kind == "h" else abs(d.p2[1] - d.p1[1])) * s, d.value, TOL) for d in D.dims)
+    geo_ok = all(close((abs(d.p2[0] - d.p1[0]) if d.kind == "h" else abs(d.p2[1] - d.p1[1])) * D.view_scale(d.view), d.value, TOL) for d in D.dims)
     hdim = [d for d in D.dims if d.kind == "v" and abs(d.value - h) < 1e-9]
     C.add(1, "1.8", "kích thước: h (chính xác, không làm tròn), b, cao_tang, tổng chiều dài, w, chuỗi/gộp chuỗi; độ dài hình học = giá trị", n_d == len(exp_v) == len(got_v) and geo_ok and len(hdim) == 1 and hdim[0].text == X["h_label"],
           f"{n_d}/{len(exp_v)} kích thước đúng; nhãn h = {hdim[0].text if hdim else None!r} (h chính xác = {h:.6f}); chuỗi bị gộp: {M['chain_collapsed']}")
@@ -104,10 +117,72 @@ def check_primitives_a(C: Checks, D, sp):
     yc = [PL(p.p1)[1] for p in by("cut_stroke")]
     ok10 = [p.s for p in cl] == ["1", "1"] and len(yc) == 2 and all(close(y, w / 2, TOL) for y in yc) and [p.s for p in by("title_section")] == ["MẶT CẮT 1-1"] and [p.s for p in by("title_plan")] == ["MẶT BẰNG THANG"]
     C.add(1, "1.10", "ký hiệu vết cắt 1-1 trên mặt bằng (2 đầu, nhãn 1, ở giữa bề rộng) và tên hai hình", ok10, f"nhãn {[p.s for p in cl]}, y vết cắt {[round(y, 3) for y in yc]} (w/2 = {w / 2:g})")
+    check_layout_a(C, D, sp)
+    check_expressions(C, [p.s for p in D.prims if isinstance(p, Text)], 1, "1.20", "chữ trên bản vẽ")
     if sp.get("warnings"):
         C.info(1, "1.11", "cảnh báo mềm (không phải lỗi)", " | ".join(sp["warnings"]))
     else:
         C.info(1, "1.11", "cảnh báo mềm 2h + b", f"2h + b = {sp['two_h_b']:.1f} mm, trong khoảng {sp['params']['nguong_2hb_min']:g}-{sp['params']['nguong_2hb_max']:g} mm (quy tắc kinh nghiệm, không phải điều khoản TCVN)")
+
+
+SECTION_TAGS = {"floor_lower", "floor_upper", "riser", "tread", "stringer_top", "stringer_low", "stringer_end", "level_line", "level_tri", "level_bar", "level_text",
+                "angle_text", "title_section", "note"}
+
+
+def _group_bboxes(D):
+    """Annotated bounding box (sheet mm) of the section view and of the plan view, from primitives + expanded dimensions."""
+    P = D.info["params"]
+    groups = {"section": [], "plan": []}
+    for p in D.prims:
+        if p.sheet or p.tag.startswith("dim_"):
+            continue
+        if p.tag == "scale_note":
+            continue
+        groups["section" if p.tag in SECTION_TAGS else "plan"].append(p)
+    for d in D.dims:
+        groups[d.view].extend(expand_dim(d, P))
+    titles = {v: next(p for p in D.prims if p.tag == t) for v, t in (("section", "title_section"), ("plan", "title_plan"))}
+    for p in (q for q in D.prims if q.tag == "scale_note"):
+        v = min(titles, key=lambda k: math.hypot(titles[k].pos[0] - p.pos[0], titles[k].pos[1] - p.pos[1]))
+        groups[v].append(p)
+    out = {}
+    for v, ps in groups.items():
+        bbs = [prim_bbox(p) for p in ps]
+        out[v] = (min(b[0] for b in bbs), min(b[1] for b in bbs), max(b[2] for b in bbs), max(b[3] for b in bbs))
+    return out
+
+
+def check_layout_a(C: Checks, D, sp):
+    """1.12 scales of the two views / 1.13 arrangement on the sheet."""
+    M, P = D.meta, D.info["params"]
+    notes = sorted(p.s for p in D.prims if p.tag == "scale_note")
+    found = sorted(int(m.group(1)) for t in notes for m in [re.fullmatch(r"TỶ LỆ 1:(\d+)", t)] if m)
+    s_sec, s_pl = D.view_scale("section"), D.view_scale("plan")
+    ok = (len(found) == 2 and found == sorted([s_sec, s_pl]) and s_sec in SCALES and s_pl in SCALES and s_sec <= s_pl and D.scale == s_sec
+          and D.fields.get("cell7") == (f"1:{s_sec}" if s_sec == s_pl else f"1:{s_sec} / 1:{s_pl}"))
+    if sp.get("scale"):
+        ok = ok and s_sec == s_pl == sp["scale"]
+    elif not sp.get("ty_le_rieng", True):
+        ok = ok and s_sec == s_pl
+    C.add(1, "1.12", "tỷ lệ từng hình: ghi dưới mỗi hình, thuộc dãy chuẩn, mặt bằng không lớn hơn mặt cắt, ô tỷ lệ khung tên khớp, tỷ lệ bản vẽ DXF = tỷ lệ mặt cắt", ok,
+          f"ghi chú {notes}; mặt cắt 1:{s_sec}, mặt bằng 1:{s_pl}; ô 7 = {D.fields.get('cell7')!r}; tỷ lệ DXF 1:{D.scale}")
+    g = _group_bboxes(D)
+    a, b = g["section"], g["plan"]
+    sep_x, sep_y = max(a[0] - b[2], b[0] - a[2]), max(a[1] - b[3], b[1] - a[3])
+    sep = max(sep_x, sep_y)
+    gap = P["khoang_giua_hinh"]
+    kind = "chong" if sep_y >= sep_x else "ngang"
+    clear_ok = True
+    for v, r in g.items():
+        clear_ok &= (r[0] >= FRAME_X0 + P["khe_vung_ve"] - 1e-6 and r[2] <= FRAME_X1 - P["khe_vung_ve"] + 1e-6 and r[1] >= FRAME_Y0 + P["khe_vung_ve"] - 1e-6
+                     and r[3] <= FRAME_Y1 - P["khe_vung_ve"] + 1e-6 and max(TB_X0 - r[2], r[1] - TB_Y1) >= P["khe_vung_ve"] - 1e-6)
+    mode_ok = sp.get("bo_cuc", "auto") in ("auto", kind)
+    if kind == "chong":
+        pos_ok = b[3] <= a[1] - gap + 1e-6 and close(D.meta["plan_origin"][0], D.meta["section_origin"][0], 1e-9)
+    else:
+        pos_ok = b[0] >= a[2] + gap - 1e-6
+    C.add(1, "1.13", "bố cục tờ giấy: hai hình không chồng nhau (cách ≥ khoang_giua_hinh), mỗi hình cách khung/khung tên ≥ khe_vung_ve, đúng bố cục yêu cầu", sep >= gap - 1e-6 and clear_ok and pos_ok and mode_ok,
+          f"bố cục {kind}; khoảng cách hai hình {sep:.2f} mm (yêu cầu ≥ {gap:g}); mặt cắt bbox {tuple(round(x, 1) for x in a)}, mặt bằng bbox {tuple(round(x, 1) for x in b)}")
 
 
 # ------------------------------------------------------------------ 2. DXF (independent of primitives)
@@ -142,14 +217,18 @@ def check_dxf_a(C: Checks, D, sp, dx):
     for e in polys:
         xs, ys = [float(v) for v in e["rec"][10]], [float(v) for v in e["rec"][20]]
         plan.append((min(xs), min(ys), max(xs), max(ys)))
-    plan_ok = len(plan) == 1 and close(plan[0][0], 0.0, TOL_DXF) and close(plan[0][2] - plan[0][0], L, TOL_DXF) and close(plan[0][3] - plan[0][1], w, TOL_DXF) and plan[0][3] < 0
+    # Scales are read from the DXF's own "TỶ LỆ 1:n" notes (independent of the metadata): section = the finer one (the DXF scale), plan >= section.
+    scl = sorted(int(m.group(1)) for _, t in dx["texts"] for m in [re.fullmatch(r"TỶ LỆ 1:(\d+)", t)] if m)
+    fac = (scl[0] / scl[-1]) if len(scl) == 2 else float("nan")          # plan size in the DXF = real size x s_sec / s_plan
+    plan_ok = len(plan) == 1 and close(plan[0][2] - plan[0][0], L * fac, TOL_DXF) and close(plan[0][3] - plan[0][1], w * fac, TOL_DXF) and \
+        ((close(plan[0][0], 0.0, TOL_DXF) and plan[0][3] < 0) or plan[0][0] > L)          # below the section on the same x origin, or to its right
     hid = ents.get("NET-KHUAT", [])
-    hid_ok = bool(plan) and len(hid) == 2 and all(close(abs(g[1][0] - g[0][0]), L, TOL_DXF) for g in hid) and \
-        sorted(round(g[0][1] - plan[0][1], 3) for g in hid) == sorted([round(ds["bw"], 3), round(w - ds["bw"], 3)])
+    hid_ok = bool(plan) and len(hid) == 2 and all(close(abs(g[1][0] - g[0][0]), L * fac, TOL_DXF) for g in hid) and \
+        sorted(round(g[0][1] - plan[0][1], 3) for g in hid) == sorted([round(ds["bw"] * fac, 3), round((w - ds["bw"]) * fac, 3)])
     txt = [t for lay, t in dx["texts"]]
     texts_ok = all(txt.count(x) >= 1 for x in X["notes"] + X["levels"] + [X["angle"], "MẶT CẮT 1-1", "MẶT BẰNG THANG"]) and all(str(i) in txt for i in range(1, n))
-    C.add(2, "2.8", "DXF: hình chữ nhật mặt bằng (n−1)·b × w thẳng hàng và nằm dưới mặt cắt; 2 mép dầm cốn khuất cách mép bw; chữ ghi chú/cao độ/góc/số bậc",
-          plan_ok and hid_ok and texts_ok, f"mặt bằng {plan}; dầm khuất {hid_ok}; chữ {texts_ok}")
+    C.add(2, "2.8", "DXF: hình chữ nhật mặt bằng (n−1)·b × w (nhân s_cắt/s_bằng nếu mặt bằng nhỏ hơn), dưới hoặc bên phải mặt cắt; 2 mép dầm cốn khuất cách mép bw; chữ ghi chú/cao độ/góc/số bậc",
+          plan_ok and hid_ok and texts_ok, f"mặt bằng {plan} (hệ số {fac:.3f}); dầm khuất {hid_ok}; chữ {texts_ok}")
 
 
 # ------------------------------------------------------------------ 6. 3D model

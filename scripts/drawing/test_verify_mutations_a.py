@@ -63,6 +63,21 @@ def main():
     # ---- positive controls
     expect("control_primitives_a1", not prim_check(D1, sp1), f"không đạt: {sorted(prim_check(D1, sp1))}")
     expect("control_primitives_a2_non_integer_h", not prim_check(D2, sp2), f"không đạt: {sorted(prim_check(D2, sp2))}")
+    sp6, D6 = load("a6_ngang_3600x20", profile)
+    expect("control_primitives_a6_side_by_side", not prim_check(D6, sp6) and D6.meta["layout"] == "ngang", f"không đạt: {sorted(prim_check(D6, sp6))}; bố cục {D6.meta['layout']}")
+    p6 = os.path.join(work, "a6.dxf")
+    render_dxf(D6, profile, p6)
+    C6 = verify.Checks()
+    verify.check_dxf(C6, D6, sp6, profile, p6, do_fc=False)
+    expect("control_dxf_a6_side_by_side", not failed(C6), f"không đạt: {sorted(failed(C6))}")
+    sp8, D8 = load("a8_ngang_rieng_2400x14", profile)
+    expect("control_primitives_a8_side_by_side_two_scales", not prim_check(D8, sp8) and D8.meta["layout"] == "ngang" and D8.scale != D8.view_scale("plan"),
+           f"không đạt: {sorted(prim_check(D8, sp8))}; bố cục {D8.meta['layout']} 1:{D8.scale}/1:{D8.view_scale('plan')}")
+    p8 = os.path.join(work, "a8.dxf")
+    render_dxf(D8, profile, p8)
+    C8 = verify.Checks()
+    verify.check_dxf(C8, D8, sp8, profile, p8, do_fc=False)
+    expect("control_dxf_a8_plan_reduced_in_dxf", not failed(C8), f"không đạt: {sorted(failed(C8))}")
     base_dxf = os.path.join(work, "base.dxf")
     render_dxf(D1, profile, base_dxf)
     C = verify.Checks()
@@ -121,11 +136,38 @@ def main():
     # wrong plan width / wrong angle text
     def wrong_w(Dm):
         r = [p for p in Dm.prims if p.tag == "plan_outline"][0]
-        r.p1 = (r.p1[0], r.p1[1] + 1.0 / Dm.scale)
+        r.p1 = (r.p1[0], r.p1[1] + 1.0 / Dm.view_scale("plan"))
     need({"1.4"}, prim_check(mut(wrong_w), sp1), "prim_plan_width_plus_1mm")
     def wrong_angle(Dm):
         [p for p in Dm.prims if p.tag == "angle_text"][0].s = "GÓC DỐC 35,0°"
     need({"1.6"}, prim_check(mut(wrong_angle), sp1), "prim_angle_text_wrong")
+    # (6) false arithmetic printed on the drawing (the old a2 note) and scale/layout mistakes
+    def false_equation(Dm):
+        n_ = [p for p in Dm.prims if p.tag == "note"][1]
+        n_.s = "17 x 176,5 = 3000"
+    need({"1.20", "1.9"}, prim_check(mut(false_equation, D2), sp2), "prim_false_equation_17x176.5=3000")
+    def wrong_approx(Dm):
+        n_ = [p for p in Dm.prims if p.tag == "note"][1]
+        n_.s = n_.s.replace("176,5", "176,4")
+    need({"1.20", "1.9"}, prim_check(mut(wrong_approx, D2), sp2), "prim_approx_note_176.4")
+    def scale_note_wrong(Dm):
+        [p for p in Dm.prims if p.tag == "scale_note"][0].s = "TỶ LỆ 1:100"
+    need({"1.12"}, prim_check(mut(scale_note_wrong), sp1), "prim_scale_note_1:100")
+    def plan_over_section(Dm):
+        for p in Dm.prims:
+            if p.tag in ("plan_outline", "plan_stringer", "plan_tread_line", "step_no", "plan_arrow", "up_text", "cut_stroke", "cut_arrow", "cut_label", "title_plan"):
+                if hasattr(p, "p1"):
+                    p.p1 = (p.p1[0], p.p1[1] + 40.0)
+                if hasattr(p, "p0"):
+                    p.p0 = (p.p0[0], p.p0[1] + 40.0)
+                if hasattr(p, "p2"):
+                    p.p2 = (p.p2[0], p.p2[1] + 40.0)
+                if hasattr(p, "pos"):
+                    p.pos = (p.pos[0], p.pos[1] + 40.0)
+    need({"1.13", "1.4"}, prim_check(mut(plan_over_section), sp1), "prim_plan_moved_up_over_section")
+    def view_scales_swapped(Dm):
+        Dm.meta["view_scales"] = {"section": Dm.view_scale("plan"), "plan": Dm.view_scale("section")}
+    need({"1.1", "1.3", "1.12"}, prim_check(mut(view_scales_swapped), sp1), "meta_view_scales_swapped")
     # a spec that disagrees with the (correct) drawing must fail too: b changed in the spec only
     sp_b = dict(sp1, b=260)
     need({"1.2", "1.3", "1.4"}, prim_check(D1, sp_b), "spec_b_260_vs_drawing_b_250")
@@ -148,7 +190,8 @@ def main():
     src = open(base_dxf, "rb").read()
     for name, old, new, ids in (("dxf_text_edit_note", "THÉP TẤM DÀY 3 MM".encode(), "THÉP TẤM DÀY 5 MM".encode(), {"2.6", "2.8"}),
                                 ("dxf_text_edit_level", b"+3.600", b"+3.800", {"2.6", "2.8"}),
-                                ("dxf_ltscale_changed", b"$LTSCALE\r\n 40\r\n50\r\n", b"$LTSCALE\r\n 40\r\n20\r\n", {"2.2"})):
+                                ("dxf_false_equation", "19 x 250 = 4750".encode(), "19 x 250 = 4700".encode(), {"2.12", "2.6"}),
+                                ("dxf_ltscale_changed", f"$LTSCALE\r\n 40\r\n{D1.scale}\r\n".encode(), b"$LTSCALE\r\n 40\r\n100\r\n", {"2.2"})):
         data = src.replace(old, new, 1)
         if data == src:
             data = src.replace(old.replace(b"\r\n", b"\n"), new.replace(b"\r\n", b"\n"), 1)

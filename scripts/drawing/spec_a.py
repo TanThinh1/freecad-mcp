@@ -2,6 +2,8 @@
 
 Parameters: cao_tang (mm, floor-to-floor), so_bac (number of risers), be_rong_mat_bac b, be_rong_ve w, chieu_day_tam (plate
 thickness, default 3), dam_con (box stringer, e.g. "H60x120x2" = width 60 x depth 120 x wall 2, mm), ty_le, khung_ten.
+Layout options: bo_cuc ("auto" | "chong" | "ngang") and ty_le_rieng (true: with ty_le "auto" the plan may use a smaller scale than the
+section; an explicit ty_le is one common scale for both views).
 The riser height h = cao_tang / so_bac may be non-integer; it is never rounded in geometry (verification tolerance 1e-6 mm).
 """
 from __future__ import annotations
@@ -20,9 +22,11 @@ DEFAULT_PARAMS_A.update(
     cao_chu_so_bac=2.5,       # step numbers in the plan
     nguong_2hb_min=600.0,     # soft rule of thumb (NOT a verified TCVN clause): 2h + b normally 600..630 mm (real mm)
     nguong_2hb_max=630.0,
+    khoang_giua_hinh=8.0,     # clear gap between the section block and the plan block (paper mm)
 )
 # parameters that are not paper lengths but real mm thresholds
 REAL_MM_PARAMS = ("nguong_2hb_min", "nguong_2hb_max")
+BO_CUC = ("auto", "chong", "ngang")      # sheet arrangement: automatic, plan below the section, plan beside the section
 
 
 def parse_stringer(text):
@@ -69,6 +73,13 @@ def validate(spec) -> dict:
     elif w and 2 * ds["bw"] >= w:
         errors.append(f"dam_con rộng {ds['bw']:g} mm: hai dầm cốn ({2 * ds['bw']:g} mm) không nhỏ hơn bề rộng vế be_rong_ve = {w:g} mm.")
     ty_le, scale = parse_scale(spec.get("ty_le", "auto"), errors)
+    bo_cuc = spec.get("bo_cuc", "auto")
+    if bo_cuc not in BO_CUC:
+        errors.append(f"bo_cuc = {bo_cuc!r} không hợp lệ. Dùng một trong: " + ", ".join(f'"{x}"' for x in BO_CUC) + " (auto: tự chọn; chong: mặt bằng dưới mặt cắt; ngang: mặt bằng bên phải mặt cắt).")
+    rieng = spec.get("ty_le_rieng", True)
+    if not isinstance(rieng, bool):
+        errors.append(f"ty_le_rieng = {rieng!r} phải là true hoặc false (true: cho phép mặt bằng dùng tỷ lệ nhỏ hơn mặt cắt khi dùng ty_le \"auto\").")
+        rieng = True
     ten = parse_ten(spec.get("ten"), errors)
     kt = parse_khung_ten(spec.get("khung_ten") or {}, errors)
     params = parse_params(spec.get("tham_so") or {}, DEFAULT_PARAMS_A, errors)
@@ -82,5 +93,5 @@ def validate(spec) -> dict:
     if not (params["nguong_2hb_min"] <= two_h_b <= params["nguong_2hb_max"]):
         warnings.append(f"2h + b = {two_h_b:.1f} mm nằm ngoài khoảng {params['nguong_2hb_min']:g}-{params['nguong_2hb_max']:g} mm: ngoài khoảng thường dùng, "
                         f"cần người thiết kế xác nhận. (Quy tắc kinh nghiệm thông dụng, KHÔNG phải điều khoản TCVN đã xác minh; ngưỡng đổi được qua tham_so.)")
-    return dict(loai="A", ten=ten, cao_tang=H, so_bac=n, b=b, w=w, t=float(t), dam_con=ds, ty_le=ty_le, scale=scale, khung_ten=kt, params=params,
+    return dict(loai="A", ten=ten, cao_tang=H, so_bac=n, b=b, w=w, t=float(t), dam_con=ds, ty_le=ty_le, scale=scale, bo_cuc=bo_cuc, ty_le_rieng=rieng, khung_ten=kt, params=params,
                 h=h, L=(n - 1) * b, n_treads=n - 1, theta_deg=math.degrees(math.atan2(h, b)), two_h_b=two_h_b, warnings=warnings)
