@@ -67,7 +67,7 @@ def greedy_match(expected, got, near):
 
 
 # ------------------------------------------------------------------ 1. primitives vs formulas
-def check_primitives(C: Checks, D, sp):
+def check_primitives_b(C: Checks, D, sp):
     s = D.scale
     P = D.info["params"]
     b, h = sp["section"]["b"], sp["section"]["h"]
@@ -112,6 +112,9 @@ def check_primitives(C: Checks, D, sp):
     labels = sorted(p.s for p in D.by_tag("bubble_text"))
     wantl = sorted([str(i + 1) for i in range(N)] + ["A", "B"])
     C.add(1, "1.13", "ký hiệu trục: 1..N và A, B", labels == wantl, f"{len(labels)} vòng: {', '.join(wantl)}")
+
+
+check_primitives = check_primitives_b      # backwards-compatible name (tests)
 
 
 # ------------------------------------------------------------------ 2. DXF
@@ -184,8 +187,9 @@ def dxf_geometry_diff(dx: dict, D) -> dict:
 def check_dxf(C: Checks, D, sp, profile, dxf: str, do_fc: bool):
     dx = read_dxf(dxf)
     s = D.scale
-    N, nhip, dai, buoc = sp["so_truc_doc"], sp["nhip"], sp["dai_nha"], sp["buoc_cot"]
-    b, h = sp["section"]["b"], sp["section"]["h"]
+    if D.kind == "B":
+        N, nhip, dai, buoc = sp["so_truc_doc"], sp["nhip"], sp["dai_nha"], sp["buoc_cot"]
+        b, h = sp["section"]["b"], sp["section"]["h"]
     C.add(2, "2.1", "định dạng AC1021, UTF-8 hợp lệ, không dùng escape \\U+", dx["version"] == "AC1021" and dx["utf8_ok"] and dx["escapes"] == 0,
           f"version={dx['version']} utf8={dx['utf8_ok']} byte≥0x80={dx['high_bytes']} escape={dx['escapes']} size={dx['size']:,}")
     C.add(2, "2.2", "$LTSCALE = tỷ lệ bản vẽ", close(dx["ltscale"], s, 1e-9), f"{dx['ltscale']:g} (tỷ lệ 1:{s})")
@@ -205,16 +209,20 @@ def check_dxf(C: Checks, D, sp, profile, dxf: str, do_fc: bool):
     got_t = collections.Counter(t for _, t in dx["texts"])
     C.add(2, "2.6", "chữ trong DXF (kể cả tiếng Việt) khớp chính xác", want_t == got_t,
           f"{sum(got_t.values())} chuỗi TEXT; ví dụ: {[t for t in got_t if any(ord(c) > 127 for c in t)][:3]}")
-    axis = [e for e in dx["ents"] if e["type"] == "LINE" and e["layer"] == LAYER_AXIS]
-    vx = sorted({round(f(e["rec"], 10), 3) for e in axis if close(f(e["rec"], 10), f(e["rec"], 11), 1e-6)})
-    hy = sorted({round(f(e["rec"], 20), 3) for e in axis if close(f(e["rec"], 20), f(e["rec"], 21), 1e-6)})
-    C.add(2, "2.7", "toạ độ trục theo mm thật (gốc tại giao 1/A)", vx == [round(i * buoc, 3) for i in range(N)] and hy == [0.0, round(nhip, 3)], f"x trục dọc {vx[:3]}…{vx[-1]}; y trục ngang {hy}")
-    cols = [e for e in dx["ents"] if e["type"] == "LWPOLYLINE" and e["layer"] == LAYER_COLUMN]
-    sizes = collections.Counter()
-    for e in cols:
-        xs, ys = [float(v) for v in e["rec"][10]], [float(v) for v in e["rec"][20]]
-        sizes[(round(max(xs) - min(xs), 3), round(max(ys) - min(ys), 3))] += 1
-    C.add(2, "2.8", "cột trong DXF đúng b × h (mm thật)", dict(sizes) == {(round(b, 3), round(h, 3)): 2 * N}, f"{dict(sizes)}")
+    if D.kind == "B":
+        axis = [e for e in dx["ents"] if e["type"] == "LINE" and e["layer"] == LAYER_AXIS]
+        vx = sorted({round(f(e["rec"], 10), 3) for e in axis if close(f(e["rec"], 10), f(e["rec"], 11), 1e-6)})
+        hy = sorted({round(f(e["rec"], 20), 3) for e in axis if close(f(e["rec"], 20), f(e["rec"], 21), 1e-6)})
+        C.add(2, "2.7", "toạ độ trục theo mm thật (gốc tại giao 1/A)", vx == [round(i * buoc, 3) for i in range(N)] and hy == [0.0, round(nhip, 3)], f"x trục dọc {vx[:3]}…{vx[-1]}; y trục ngang {hy}")
+        cols = [e for e in dx["ents"] if e["type"] == "LWPOLYLINE" and e["layer"] == LAYER_COLUMN]
+        sizes = collections.Counter()
+        for e in cols:
+            xs, ys = [float(v) for v in e["rec"][10]], [float(v) for v in e["rec"][20]]
+            sizes[(round(max(xs) - min(xs), 3), round(max(ys) - min(ys), 3))] += 1
+        C.add(2, "2.8", "cột trong DXF đúng b × h (mm thật)", dict(sizes) == {(round(b, 3), round(h, 3)): 2 * N}, f"{dict(sizes)}")
+    else:
+        import verify_a
+        verify_a.check_dxf_a(C, D, sp, dx)
     gd = dxf_geometry_diff(dx, D)
     C.add(2, "2.9", "mọi primitive có entity DXF đúng vị trí/kích thước (±0,001 mm thật)", all(a == t for a, t in gd.values()) and sum(t for _, t in gd.values()) == len(D.prims),
           "; ".join(f"{k} {a}/{t}" for k, (a, t) in sorted(gd.items())))
@@ -330,8 +338,6 @@ def check_pdf(C: Checks, D, sp, dx: dict, pdf: str, png: str | None, profile: di
     a = analyze_pdf(pdf)
     paths = a["paths"]
     s = D.scale
-    N = sp["so_truc_doc"]
-    b, h = sp["section"]["b"], sp["section"]["h"]
     W, H = a["page_mm"]
     top = lambda y: 297.0 - y
     C.add(4, "4.1", "khổ trang 420 × 297 mm", close(W, 420, 0.3) and close(H, 297, 0.3), f"{W:.2f} × {H:.2f} mm")
@@ -372,31 +378,47 @@ def check_pdf(C: Checks, D, sp, dx: dict, pdf: str, png: str | None, profile: di
     extra = [p for i, p, cls in pool if i not in used]
     C.add(5, "5.2", "PDF không có nét thừa ngoài primitives", not extra, f"{len(extra)} nét thừa" + (f", ví dụ bbox {[tuple(round(x, 2) for x in p['bb']) for p in extra[:2]]}" if extra else ""))
     dxn = dx["by_type"]
-    C.add(5, "5.3", "số nét PDF = số LINE / LWPOLYLINE / CIRCLE của DXF", tally["line"][1] == dxn["LINE"] and tally["rect"][1] == dxn["LWPOLYLINE"] and tally["circle"][1] == dxn["CIRCLE"] == N + 2,
-          f"LINE {tally['line'][1]}/{dxn['LINE']}, rect {tally['rect'][1]}/{dxn['LWPOLYLINE']}, circle {tally['circle'][1]}/{dxn['CIRCLE']} (N+2 = {N + 2})")
+    extra_b = ""
+    ok_b = True
+    if D.kind == "B":
+        ok_b = dxn["CIRCLE"] == sp["so_truc_doc"] + 2
+        extra_b = f" (N+2 = {sp['so_truc_doc'] + 2})"
+    C.add(5, "5.3", "số nét PDF = số LINE / LWPOLYLINE / CIRCLE của DXF", tally["line"][1] == dxn["LINE"] and tally["rect"][1] == dxn["LWPOLYLINE"] and tally["circle"][1] == dxn["CIRCLE"] and ok_b,
+          f"LINE {tally['line'][1]}/{dxn['LINE']}, rect {tally['rect'][1]}/{dxn['LWPOLYLINE']}, circle {tally['circle'][1]}/{dxn['CIRCLE']}{extra_b}")
     cen = [p for p in paths if _straight(p) and len(p["dash"]) == 4]
     want = [abs(x) for x in LTYPES["CENTER"][1]]
+    n_center = sum(1 for p in D.prims if isinstance(p, Line) and profile[p.layer]["ltype"] == "CENTER")
     pat_ok = bool(cen) and all(all(close(x, y, 0.15) for x, y in zip(p["dash"], want)) for p in cen)
-    C.add(5, "5.4", "trục CENTER: số lượng N+2 và mẫu nét 12 / 1,5 / 2 / 1,5 mm", len(cen) == N + 2 and pat_ok,
-          f"PDF {len(cen)} trục; mẫu {[round(x, 2) for x in cen[0]['dash']] if cen else None}")
+    C.add(5, "5.4", "nét CENTER: số lượng = số đường layer CENTER của primitives, mẫu nét 12 / 1,5 / 2 / 1,5 mm", len(cen) == n_center and n_center > 0 and pat_ok,
+          f"PDF {len(cen)} / primitives {n_center}; mẫu {[round(x, 2) for x in cen[0]['dash']] if cen else None}")
     ok, bad, wr, n_digit = pdf_text_match(D, paths)
     ntext = sum(1 for p in D.prims if isinstance(p, Text))
     C.add(5, "5.5", "mỗi chuỗi chữ (kể cả khung tên) có nét chữ đúng vị trí; số có ≥ 3 chữ số đúng độ rộng nét chữ", ok == ntext and not wr,
           f"{ok}/{ntext} chuỗi có nét chữ tại vị trí; độ rộng sai: {wr[:3]}; không thấy: {bad[:3]}. Giá trị từng chữ số trong PDF không giải mã được (suy luận: cùng nguồn primitives; 5.1 xác nhận chiều dài đường kích thước)")
-    vals = collections.Counter(int(t) for lay, t in dx["texts"] if lay == LAYER_DIM and re.fullmatch(r"\d+", t))
+    # every dimension must exist in the PDF as a dimension line of the exact real length, and its label text must be in the DXF
+    vals = [d.value for d in D.dims]
     dim_lines = [p for p in paths if _straight(p) and close(p["lw"], 0.25, 0.03) and not p["dash"] and (close(p["bb"][0], p["bb"][2], 0.01) or close(p["bb"][1], p["bb"][3], 0.01))]
-    n_m, _ = greedy_match([v for v, n in vals.items() for _ in range(n)], dim_lines,
-                          lambda v, p: close(max(p["bb"][2] - p["bb"][0], p["bb"][3] - p["bb"][1]) * s, v, TOL_PDF * s))
-    C.add(5, "5.6", "mỗi giá trị kích thước DXF có đường kích thước PDF dài đúng (± 0,06 mm × tỷ lệ)", sum(vals.values()) > 0 and n_m == sum(vals.values()), f"{n_m}/{sum(vals.values())}: {dict(vals)}")
+    n_m, bad_v = greedy_match(vals, dim_lines, lambda v, p: close(max(p["bb"][2] - p["bb"][0], p["bb"][3] - p["bb"][1]) * s, v, TOL_PDF * s))
+    dxt = collections.Counter(t for lay, t in dx["texts"] if lay == LAYER_DIM)
+    want_t = collections.Counter(p.s for p in D.prims if isinstance(p, Text) and p.tag.startswith("dim_") and p.tag.endswith("_text"))
+    C.add(5, "5.6", "mỗi kích thước có đường kích thước PDF dài đúng (± 0,06 mm × tỷ lệ) và chữ tương ứng trong DXF", bool(vals) and n_m == len(vals) and dxt == want_t,
+          f"{n_m}/{len(vals)} đường khớp (giá trị {sorted(set(round(v, 2) for v in vals))}); chữ DXF {dict(dxt)}")
     return a
 
 
-def run_all(D, sp, profile, files: dict, do_fc=True, do_dwg=True, do_pdf=True, dwg_info=None):
+def run_all(D, sp, profile, files: dict, do_fc=True, do_dwg=True, do_pdf=True, dwg_info=None, model3d=None):
     C = Checks()
-    check_primitives(C, D, sp)
+    if D.kind == "A":
+        import verify_a
+        verify_a.check_primitives_a(C, D, sp)
+    else:
+        check_primitives_b(C, D, sp)
     dx = check_dxf(C, D, sp, profile, files["dxf"], do_fc)
     if do_dwg:
         check_dwg(C, D, dx, files["dwg"], files.get("work") or os.path.dirname(files["dxf"]), dwg_info or {})
     if do_pdf:
         check_pdf(C, D, sp, dx, files["pdf"], files.get("png"), profile)
+    if D.kind == "A" and model3d is not None:
+        import verify_a
+        verify_a.check_3d_a(C, D, sp, model3d)
     return C

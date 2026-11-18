@@ -23,13 +23,45 @@ sys.path.insert(0, HERE)
 import oda  # noqa: E402
 import titleblock as TBK  # noqa: E402
 import verify  # noqa: E402
-from build_b import build  # noqa: E402
+import build_a  # noqa: E402
+import build_b  # noqa: E402
+import spec_a  # noqa: E402
+import spec_b  # noqa: E402
 from dxf_render import render_dxf  # noqa: E402
 from pdf_render import symbol_svg  # noqa: E402
-from spec_b import SpecError, load_spec, validate  # noqa: E402
+from spec_b import SpecError, load_spec  # noqa: E402
 from tcvn import ProfileError, read_profile  # noqa: E402
 
 FREECAD = os.environ.get("FREECAD_EXE") or os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "FreeCAD 1.1", "bin", "freecad.exe")
+FREECADCMD = os.environ.get("FREECADCMD_EXE") or os.path.join(os.path.dirname(FREECAD), "FreeCADCmd.exe")
+KINDS = {"A": (spec_a.validate, build_a.build), "B": (spec_b.validate, build_b.build)}
+
+
+def render_3d(sp: dict, outdir: str, work: str, name: str, timeout: int = 240) -> dict:
+    """Type A only: Part model from the same spec (FreeCADCmd), then a best-effort screenshot with the hidden GUI."""
+    job = dict(n=sp["so_bac"], H=sp["cao_tang"], b=sp["b"], w=sp["w"], t=sp["t"], bw=sp["dam_con"]["bw"], bd=sp["dam_con"]["bd"],
+               fcstd=os.path.join(outdir, f"{name}.FCStd"), png=os.path.join(outdir, f"{name}_3d.png"), result=os.path.join(work, f"{name}_3d.json"))
+    _rm(job["fcstd"], job["result"], job["png"])
+    jp = os.path.join(work, f"{name}_3d_job.json")
+    json.dump(job, open(jp, "w", encoding="utf-8"))
+    if not os.path.isfile(FREECADCMD):
+        return dict(ok=False, error=f"không tìm thấy {FREECADCMD} (đặt FREECADCMD_EXE)")
+    try:
+        subprocess.run([FREECADCMD, os.path.join(HERE, "model3d_a.py")], env=dict(os.environ, MODEL_JOB=jp), capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return dict(ok=False, error=f"FreeCADCmd quá {timeout} giây")
+    if not os.path.isfile(job["result"]):
+        return dict(ok=False, error="model3d_a.py không ghi kết quả")
+    res = json.load(open(job["result"], encoding="utf-8"))
+    if not res.get("ok"):
+        return dict(ok=False, error=res.get("error", "?"))
+    # The preview PNG is software-rendered inside model3d_a.py (hidden-GUI screenshots come out blank: no OpenGL context).
+    if res.get("png") and not os.path.isfile(res["png"]):
+        res.pop("png")
+        res["png_error"] = "không có tệp ảnh"
+    if not res.get("png") and not res.get("png_error"):
+        res["png_error"] = "không có kết quả"
+    return res
 
 
 def _rm(*paths):
@@ -66,23 +98,27 @@ def render_pdf(D, profile, outdir: str, work: str, name: str, timeout: int = 300
 def render_png(pdf: str, png: str, width: int = 2400) -> bool:
     _rm(png)
     try:
-        subprocess.run(["powershell", "-NoProfile", "-File", os.path.join(HERE, "pdf_to_png.ps1"), "-Pdf", pdf, "-Png", png, "-Width", str(width)],
+        subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", os.path.join(HERE, "pdf_to_png.ps1"), "-Pdf", pdf, "-Png", png, "-Width", str(width)],
                        capture_output=True, text=True, timeout=120)
     except subprocess.TimeoutExpired:
         return False
     return os.path.isfile(png)
 
 
-def make(spec_path: str, out_root: str, profile_path: str | None, do_pdf=True, do_dwg=True, do_fc=True) -> dict:
+def make(spec_path: str, out_root: str, profile_path: str | None, do_pdf=True, do_dwg=True, do_fc=True, do_3d=True) -> dict:
     t00 = time.perf_counter()
     T: dict = {}
     res: dict = dict(spec=spec_path, name=os.path.splitext(os.path.basename(spec_path))[0], status="?", timings=T, stages={})
     try:
         raw = load_spec(spec_path)
         t = time.perf_counter()
-        sp = validate(raw)
+        kind = raw.get("loai", "B") if isinstance(raw, dict) else "B"
+        if kind not in KINDS:
+            raise SpecError([f"loai = {kind!r} chưa được hỗ trợ (A: cầu thang thép, B: mặt bằng lưới trục và cột)."])
+        validate_fn, build_fn = KINDS[kind]
+        sp = validate_fn(raw)
         profile = read_profile(profile_path)
-        D = build(sp, profile)
+        D = build_fn(sp, profile)
         T["build"] = time.perf_counter() - t
     except SpecError as e:
         res.update(status="loi_dau_vao", errors=e.errors)
@@ -134,12 +170,23 @@ def make(spec_path: str, out_root: str, profile_path: str | None, do_pdf=True, d
             skipped.append("pdf")
         if not do_fc:
             skipped.append("freecad_import")
+        model3d = None
+        if D.kind == "A":
+            if do_3d:
+                t = time.perf_counter()
+                model3d = render_3d(sp, outdir, work, name)
+                T["3d"] = time.perf_counter() - t
+                res["stages"]["3d"] = "ok" if model3d.get("ok") else f"LOI: {model3d.get('error')}"
+                res["png3d"] = model3d.get("png")
+            else:
+                skipped.append("3d")
+        res["warnings"] = D.info.get("warnings", [])
         t = time.perf_counter()
         dwg_ok = bool(dwg_info and dwg_info.get("ok"))
-        C = verify.run_all(D, sp, profile, dict(files, work=work), do_fc=do_fc, do_dwg=do_dwg and dwg_ok, do_pdf=do_pdf and pdf_ok, dwg_info=dwg_info)
+        C = verify.run_all(D, sp, profile, dict(files, work=work), do_fc=do_fc, do_dwg=do_dwg and dwg_ok, do_pdf=do_pdf and pdf_ok, dwg_info=dwg_info, model3d=model3d)
         T["verify"] = time.perf_counter() - t
         res["checks"] = C.items
-        res["groups"] = {g: C.passed(g) for g in (1, 2, 3, 4, 5)}
+        res["groups"] = {g: C.passed(g) for g in (1, 2, 3, 4, 5, 6)}
         stages_ok = all(v == "ok" for v in res["stages"].values())
         if not (C.all_ok() and stages_ok):
             res["status"] = "khong_dat"
@@ -169,6 +216,8 @@ def print_result(r: dict):
     for k, v in r.get("stages", {}).items():
         if v != "ok":
             print(f"  bước {k}: {v}")
+    for w_ in r.get("warnings", []):
+        print("  CẢNH BÁO:", w_)
     if r.get("skipped"):
         print("  ĐÃ BỎ QUA (không được kiểm): " + ", ".join(r["skipped"]))
     for c in r.get("checks", []):
@@ -202,7 +251,7 @@ def main(argv):
         return 2
     results = []
     for sp in args:
-        r = make(sp, out, prof, do_pdf="--no-pdf" not in argv, do_dwg="--no-dwg" not in argv, do_fc="--no-fc" not in argv)
+        r = make(sp, out, prof, do_pdf="--no-pdf" not in argv, do_dwg="--no-dwg" not in argv, do_fc="--no-fc" not in argv, do_3d="--no-3d" not in argv)
         print_result(r)
         results.append(r)
     return 0 if all(r["status"] == "dat" for r in results) else 1
