@@ -54,7 +54,7 @@ def close(a, b, tol):
     return abs(a - b) <= tol
 
 
-_NUM = r"(\d+(?:,\d+)?)"
+_NUM = r"(?<![\d.,])(\d+(?:,\d+)?)(?![\d.])"
 _EQ = re.compile(_NUM + r"\s*[x×]\s*" + _NUM + r"\s*=\s*" + _NUM)
 _APPROX = re.compile(_NUM + r"\s*/\s*" + _NUM + r"\s*≈\s*" + _NUM)
 
@@ -78,6 +78,9 @@ def check_expressions(C: "Checks", texts, group: int, cid: str, where: str):
             q = (D(a.replace(",", ".")) / D(b.replace(",", "."))).quantize(D(1).scaleb(cd.as_tuple().exponent), rounding=decimal.ROUND_HALF_UP)
             if q != cd:
                 bad.append(f"{t!r}: {a}/{b} = {q:f} khi làm tròn đúng số chữ số thập phân hiển thị, ≠ {c}")
+        if ("=" in t or "≈" in t) and re.search(r"\d\.\d", t):
+            bad.append(f"{t!r}: số thập phân dùng dấu chấm, chỉ hỗ trợ dấu phẩy")
+            continue
         if not found and ("=" in t or "≈" in t) and not re.fullmatch(r"[A-Za-z]+ = \d+(?:,\d+)?%?(?: \(\d+(?:,\d+)?°\))?", t):   # plain assignments like 'i = 15% (8,5°)' are not arithmetic
             bad.append(f"{t!r}: biểu thức không đọc được")
     C.add(group, cid, f"{where}: mọi biểu thức số học in trên bản vẽ (a x b = c, a/b ≈ c) đúng với số hiển thị", not bad, f"{n} biểu thức đã kiểm" + (f"; SAI: {bad[:3]}" if bad else ""))
@@ -273,7 +276,7 @@ def check_dxf(C: Checks, D, sp, profile, dxf: str, do_fc: bool):
             ok = res.get("ok") and not bad and m and int(m.group(1)) == len(dx["ents"]) and len(res.get("layers", [])) == 19
             C.add(2, "2.10", "FreeCAD nhập DXF: không UnicodeError, đủ entity, đủ 19 layer", ok,
                   f"encoding={enc.group(1) if enc else '?'}; entity đọc {m.group(1) if m else '?'}/{len(dx['ents'])}; {len(res.get('layers', []))} layer; {res.get('objects')} object; lỗi: {bad.group(0) if bad else 'không'}")
-            vi = [t for t in res.get("texts", []) if "MẶT BẰNG" in t]
+            vi = [t for t in res.get("texts", []) if any(ord(c) > 127 for c in t)]
             C.add(2, "2.11", "FreeCAD đọc đúng chữ Việt (không còn \\U+)", bool(vi) and not any("\\U+" in t for t in res.get("texts", [])), f"ví dụ: {vi[:1]}")
     return dx
 
@@ -337,7 +340,9 @@ def _pdf_class(p):
 
 
 def pdf_text_match(D, paths):
-    """Each text must have glyph outline(s) at the expected position (centre) - and digit-only strings the expected ink width."""
+    """Each text must have glyph outline(s) at the expected place: the union of the glyphs inside the expected (rotated) text box must be centred on the
+    expected centre (tolerance 0.8 mm, or 5 % of the string width for centred text / 15 % for left- or right-aligned text, whose width is only estimated);
+    digit-only strings of >= 3 digits (horizontal or vertical) must also have the expected ink width. Slanted text: position only (suy luận: rotation is not decoded)."""
     top = lambda y: 297.0 - y
     glyphs = [p for p in paths if p["kind"] == "fill" and p["n"] > 30 and (p["bb"][2] - p["bb"][0]) < 120 and (p["bb"][3] - p["bb"][1]) < 25]
     ok, bad, wr = 0, [], []
@@ -347,28 +352,24 @@ def pdf_text_match(D, paths):
         w = TBK.est_width(t.s, em, t.bold)
         ax, ay = t.pos
         off = {"left": w / 2, "center": 0.0, "right": -w / 2}[t.halign]
-        if t.rot == 0:
-            cx, cy = ax + off, top(ay + t.h / 2)
-            tola, tolb = max(0.6, 0.2 * w), max(0.7, 0.5 * t.h)
-            hit = [g for g in glyphs if close((g["bb"][0] + g["bb"][2]) / 2, cx, tola) and close((g["bb"][1] + g["bb"][3]) / 2, cy, tolb)]
-            gw = lambda g: g["bb"][2] - g["bb"][0]
-        elif t.rot % 90 != 0:
-            # slanted text: centre of the string = anchor + R(rot) * (offset along the baseline, half cap height); any glyph near it counts (no ink-width test)
-            phi = math.radians(t.rot)
-            cx, cy = ax + off * math.cos(phi) - (t.h / 2) * math.sin(phi), top(ay + off * math.sin(phi) + (t.h / 2) * math.cos(phi))
-            tola = tolb = max(0.8, 0.25 * w)
-            hit = [g for g in glyphs if close((g["bb"][0] + g["bb"][2]) / 2, cx, tola) and close((g["bb"][1] + g["bb"][3]) / 2, cy, tolb)]
-            gw = lambda g: g["bb"][2] - g["bb"][0]
-        else:
-            cx, cy = ax - t.h / 2, top(ay + off)
-            tola, tolb = max(0.7, 0.5 * t.h), max(0.6, 0.2 * w)
-            hit = [g for g in glyphs if close((g["bb"][0] + g["bb"][2]) / 2, cx, tola) and close((g["bb"][1] + g["bb"][3]) / 2, cy, tolb)]
-            gw = lambda g: g["bb"][3] - g["bb"][1]
+        phi = math.radians(t.rot)
+        cx, cy = ax + off * math.cos(phi) - (t.h / 2) * math.sin(phi), top(ay + off * math.sin(phi) + (t.h / 2) * math.cos(phi))
+        hx = abs(math.cos(phi)) * w / 2 + abs(math.sin(phi)) * t.h / 2
+        hy = abs(math.sin(phi)) * w / 2 + abs(math.cos(phi)) * t.h / 2
+        marg = 0.5
+        hit = [g for g in glyphs if abs((g["bb"][0] + g["bb"][2]) / 2 - cx) <= hx + marg and abs((g["bb"][1] + g["bb"][3]) / 2 - cy) <= hy + marg]
+        good = False
         if hit:
+            ux, uy = (min(g["bb"][0] for g in hit) + max(g["bb"][2] for g in hit)) / 2, (min(g["bb"][1] for g in hit) + max(g["bb"][3] for g in hit)) / 2
+            tol = max(0.8, (0.05 if t.halign == "center" else 0.15) * w)
+            tol_y = max(0.8, 0.6 * t.h) if t.rot % 90 == 0 and t.rot % 180 == 0 else tol
+            tol_x = tol if t.rot % 180 == 0 else max(0.8, 0.6 * t.h) if t.rot % 90 == 0 else tol
+            good = abs(ux - cx) <= tol_x and abs(uy - cy) <= tol_y
+        if good:
             ok += 1
-            if re.fullmatch(r"\d{3,}", t.s):
+            if re.fullmatch(r"\d{3,}", t.s) and t.rot % 90 == 0:
                 n_digit += 1
-                ink = max(gw(g) for g in hit)
+                ink = max(((g["bb"][2] - g["bb"][0]) if t.rot % 180 == 0 else (g["bb"][3] - g["bb"][1])) for g in hit)
                 if not (0.78 * w <= ink <= 1.02 * w):
                     wr.append((t.s, round(ink, 2), round(w, 2)))
         else:
