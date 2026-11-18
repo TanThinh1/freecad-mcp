@@ -1,4 +1,5 @@
 import functools
+import json
 import logging
 import xmlrpc.client
 from contextlib import asynccontextmanager
@@ -48,7 +49,8 @@ from .operations import (
     run_fem_analysis_operation,
 )
 from .prompt_text import ASSET_CREATION_STRATEGY
-from .responses import ErrorResponse, ToolResponse
+from . import ban_ve
+from .responses import ErrorResponse, ToolResponse, error_response, json_response
 from .server_state import ServerState
 
 
@@ -853,6 +855,75 @@ def run_fem_analysis(
         include_screenshot,
         view_name,
     )
+
+
+def _ban_ve_response(result: dict) -> ToolResponse:
+    """Drawing-tool result -> JSON text; infrastructure problems (busy, missing profile) are reported with isError."""
+    if result.get("ban") or result.get("loi_he_thong"):
+        return error_response(json.dumps(result, ensure_ascii=False, indent=2))
+    return json_response(result)
+
+
+@tool
+def huong_dan_ve(ctx: Context, loai: str) -> list[TextContent]:
+    """Hướng dẫn tham số để dựng bản vẽ kỹ thuật TCVN (A3, DXF + DWG + PDF + PNG), kèm một ví dụ spec JSON chạy được.
+
+    Gọi TRƯỚC khi vẽ để biết tên tham số, đơn vị (mm), giá trị bắt buộc/tùy chọn/mặc định và các quy tắc báo lỗi.
+
+    Args:
+        loai: "thang" (cầu thang thép một vế: mặt bằng + mặt cắt dọc 1-1), "luoi_cot" (mặt bằng lưới trục và cột nhà thép)
+            hoặc "khung_ngang" (mặt cắt ngang khung thép: cột, kèo, cao độ).
+    """
+    return _ban_ve_response(ban_ve.huong_dan(loai))
+
+
+@tool
+def kiem_tra_spec(ctx: Context, loai: str, spec: dict[str, Any] | str) -> list[TextContent]:
+    """Chỉ KIỂM TRA spec bản vẽ, không dựng file (dưới vài giây, không mở FreeCAD).
+
+    Trả lỗi tiếng Việt kèm giá trị sai (nếu có). Nếu hợp lệ: tỷ lệ và bố cục sẽ dùng cùng lý do chọn, các số đo suy ra (cao đỉnh, số bậc,
+    số cột...), và cảnh báo (làm tròn khi hiển thị, 2h+b ngoài 600-630 mm...). Nên gọi trước ve_ban_ve.
+
+    Args:
+        loai: "thang", "luoi_cot" hoặc "khung_ngang" (xem huong_dan_ve).
+        spec: đối tượng JSON các tham số của loại đó (không cần "ten", hệ thống tự sinh).
+    """
+    return _ban_ve_response(ban_ve.kiem_tra(loai, spec, state.freecadcmd))
+
+
+@tool
+def ve_ban_ve(ctx: Context, loai: str, spec: dict[str, Any] | str) -> list[TextContent]:
+    """Dựng bản vẽ (PDF + DXF + DWG + PNG) và chạy kiểm tra tự động, CHẠY NỀN (30-60 giây mỗi bản vẽ).
+
+    Trả ngay job_id; gọi trang_thai_ban_ve(job_id) để biết xong chưa. Chỉ một bản vẽ chạy một lúc (đang bận sẽ báo rõ).
+    Kết quả ghi vào out/<ten>/ trong thư mục fork. Spec sai sẽ trả lỗi tiếng Việt ngay, không dựng.
+
+    Args:
+        loai: "thang", "luoi_cot" hoặc "khung_ngang".
+        spec: đối tượng JSON các tham số (xem huong_dan_ve).
+    """
+    return _ban_ve_response(ban_ve.ve(loai, spec, state.freecadcmd))
+
+
+@tool
+def trang_thai_ban_ve(ctx: Context, job_id: str = "") -> list[ImageContent | TextContent]:
+    """Xem trạng thái bản vẽ đang dựng nền (dang_chay / xong / loi).
+
+    Khi xong: đường dẫn các tệp (pdf, dxf, dwg, png), tóm tắt kiểm tra tự động (đạt/không đạt, số mục, mục không đạt), cảnh báo, tỷ lệ và
+    lý do chọn, thời gian; kèm ảnh PNG của bản vẽ.
+
+    Args:
+        job_id: mã trả về từ ve_ban_ve; để trống = bản vẽ gần nhất.
+    """
+    status, png = ban_ve.trang_thai(job_id)
+    out: list[ImageContent | TextContent] = [TextContent(type="text", text=json.dumps(status, ensure_ascii=False, indent=2, default=str))]
+    if png and not state.only_text_feedback:
+        import base64
+        with open(png, "rb") as fh:
+            out.append(ImageContent(type="image", data=base64.b64encode(fh.read()).decode("ascii"), mimeType="image/png"))
+    if status.get("hop_le") is False:
+        return ErrorResponse(out)
+    return out
 
 
 @mcp.prompt()
