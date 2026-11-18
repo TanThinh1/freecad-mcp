@@ -96,6 +96,19 @@ def section_block(sp: dict, s: int):
     add(Line(layer=LAYER_STRINGER, tag="stringer_low", p1=(X(low0[0]), X(low0[1])), p2=(X(L), X(H - o))))
     if o > h and H - o < (n - 1) * h:
         add(Line(layer=LAYER_STRINGER, tag="stringer_end", p1=(X(L), X(H - o)), p2=(X(L), X((n - 1) * h))))
+    # stringer section label with a leader pointing at the lower edge of the stringer (free space below the stair); text size = the existing note size
+    cap_n0 = P["cao_chu_ghi_chu"]
+    lbl = f"DẦM CỐN {ds['text']}"
+    w_lbl = est_width(lbl, cap_to_em(cap_n0))
+    px, pz = X(low0[0] + (L - low0[0]) * 0.5), X(low0[1] + ((H - o) - low0[1]) * 0.5)          # mid-point of the lower edge
+    lead = 7.0
+    if px + lead + 1.0 + w_lbl <= X(L) + 6.0:
+        qx, tx, ha = px + lead, px + lead + 1.0, "left"
+    else:                                                      # not enough room to the right: label goes to the left of the leader
+        qx, tx, ha = px - lead, px - lead - 1.0, "right"
+    qz = pz - lead
+    add(Line(layer=LAYER_THIN, tag="dam_leader", p1=(px, pz), p2=(qx, qz)))
+    add(Text(layer=LAYER_TEXT, tag="dam_label", s=lbl, pos=(tx, qz - cap_n0 / 2), h=cap_n0, halign=ha))
     # level lines (CENTER) + level symbols
     xl0, xl1 = -(stub + EXT), X(L) + stub + EXT
     hb = P["cao_chu_vong_truc"]

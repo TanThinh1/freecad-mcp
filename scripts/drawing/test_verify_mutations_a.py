@@ -240,6 +240,27 @@ def main():
             if p.tag.startswith("stringer_"):
                 p.layer = "KEO"
     need({"1.21"}, prim_check(mut(stringer_on_keo), sp1), "prim_stringer_on_layer_KEO")
+    # (10) item 3: the stringer section label
+    def del_dam_label(Dm):
+        Dm.prims.remove([p for p in Dm.prims if p.tag == "dam_label"][0])
+    need({"1.23"}, prim_check(mut(del_dam_label), sp1), "prim_stringer_label_deleted")
+    def del_dam_leader(Dm):
+        Dm.prims.remove([p for p in Dm.prims if p.tag == "dam_leader"][0])
+    need({"1.23"}, prim_check(mut(del_dam_leader), sp1), "prim_stringer_leader_deleted")
+    def edit_dam_label(Dm):
+        [p for p in Dm.prims if p.tag == "dam_label"][0].s = "DẦM CỐN H80x120x2"
+    need({"1.23"}, prim_check(mut(edit_dam_label), sp1), "prim_stringer_label_wrong_section")
+    def dam_leader_off_stringer(Dm):
+        ld = [p for p in Dm.prims if p.tag == "dam_leader"][0]
+        ld.p1 = (ld.p1[0], ld.p1[1] + 2.0)
+    need({"1.23"}, prim_check(mut(dam_leader_off_stringer), sp1), "prim_stringer_leader_tip_2mm_off_the_stringer")
+    def dam_label_new_size(Dm):
+        [p for p in Dm.prims if p.tag == "dam_label"][0].h = 3.5
+    need({"1.23"}, prim_check(mut(dam_label_new_size), sp1), "prim_stringer_label_other_text_size")
+    def dam_label_on_stair(Dm):
+        t = [p for p in Dm.prims if p.tag == "dam_label"][0]
+        t.pos = (t.pos[0], t.pos[1] + 12.0)
+    need({"1.17", "1.23"}, prim_check(mut(dam_label_on_stair), sp1), "prim_stringer_label_moved_onto_the_stair_lines")
     # a spec that disagrees with the (correct) drawing must fail too: b changed in the spec only
     sp_b = dict(sp1, b=260)
     need({"1.2", "1.3", "1.4"}, prim_check(D1, sp_b), "spec_b_260_vs_drawing_b_250")

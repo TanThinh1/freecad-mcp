@@ -120,6 +120,7 @@ def check_primitives_a(C: Checks, D, sp):
     check_layout_a(C, D, sp)
     check_dim_text_clear(C, D)
     check_extras_a(C, D, sp)
+    check_dam_label(C, D, sp)
     st_l = [(p.tag, p.layer) for p in D.prims if p.tag.startswith("stringer_")]
     wrong = [x for x in st_l if x[1] != "NET-CHINH"] + [(p.tag, p.layer) for p in D.prims if p.layer in ("KEO", "COT")]
     C.add(1, "1.21", "dầm cốn (stringer_*) nằm trên layer NET-CHINH (nét cơ bản, thấy); không có nét nào của thang trên layer KEO (kèo) hoặc COT (cột)", bool(st_l) and not wrong,
@@ -132,7 +133,7 @@ def check_primitives_a(C: Checks, D, sp):
 
 
 SECTION_TAGS = {"floor_lower", "floor_upper", "riser", "tread", "stringer_top", "stringer_low", "stringer_end", "level_line", "level_tri", "level_bar", "level_text",
-                "angle_text", "title_section", "note"}
+                "angle_text", "title_section", "note", "dam_label", "dam_leader"}
 
 
 def _group_bboxes(D):
@@ -302,6 +303,35 @@ def check_extras_a(C: Checks, D, sp):
         else:
             want.append(_label_of(d.value))
     C.add(1, "1.19", "mọi chữ kích thước in ra đúng giá trị của kích thước (nguyên mm, hoặc 1 số lẻ dấu phẩy khi không nguyên; chuỗi gộp 'n x b = L')", got == sorted(want), f"in {got}; cần {sorted(want)}")
+
+
+def check_dam_label(C: Checks, D, sp):
+    """1.23: one label 'DẦM CỐN <dam_con>' (existing note size) with a leader whose tip is on the stringer's lower edge, clear of every other line."""
+    P = D.info["params"]
+    want = f"DẦM CỐN {sp['dam_con']['text']}"
+    lab = [p for p in D.prims if isinstance(p, Text) and p.tag == "dam_label"]
+    lead = [p for p in D.prims if isinstance(p, Line) and p.tag == "dam_leader"]
+    low = [p for p in D.prims if isinstance(p, Line) and p.tag == "stringer_low"]
+    ok = len(lab) == 1 and lab[0].s == want and len(lead) == 1 and len(low) == 1 and abs(lab[0].h - P["cao_chu_ghi_chu"]) < 1e-9
+    detail = f"{len(lab)} nhãn {[t.s for t in lab]} (cần {want!r}), {len(lead)} đường dẫn"
+    if ok:
+        ld, lw, t = lead[0], low[0], lab[0]
+        tip_d = min(_pt_seg(ld.p1, lw.p1, lw.p2), _pt_seg(ld.p2, lw.p1, lw.p2))
+        tip = ld.p1 if _pt_seg(ld.p1, lw.p1, lw.p2) <= _pt_seg(ld.p2, lw.p1, lw.p2) else ld.p2
+        other = ld.p2 if tip is ld.p1 else ld.p1
+        near_text = math.hypot(other[0] - t.pos[0], other[1] - (t.pos[1] + t.h / 2)) <= 1.5
+        length = math.hypot(ld.p2[0] - ld.p1[0], ld.p2[1] - ld.p1[1])
+        others = [g for g in D.prims if isinstance(g, Line) and not g.sheet and g is not ld]
+        clear = True
+        for i in range(1, 41):                                  # sample the leader away from its tip: >= 0.3 mm from every other line
+            f_ = 0.08 + 0.92 * i / 40
+            pt = (tip[0] + (other[0] - tip[0]) * f_, tip[1] + (other[1] - tip[1]) * f_)
+            if any(_pt_seg(pt, g.p1, g.p2) < 0.3 for g in others):
+                clear = False
+                break
+        ok = tip_d < 1e-6 and near_text and length >= 3.0 and clear
+        detail += f"; đầu mũi dẫn cách mép dưới dầm {tip_d:.6f} mm; đầu kia sát chữ {near_text}; dài {length:.1f} mm; không chạm nét khác {clear}"
+    C.add(1, "1.23", "mặt cắt: nhãn tiết diện cốn 'DẦM CỐN <dam_con>' (cỡ chữ ghi chú sẵn có) với đường dẫn chạm mép dưới cốn, không chạm nét nào khác", ok, detail)
 
 
 def check_layout_a(C: Checks, D, sp):
