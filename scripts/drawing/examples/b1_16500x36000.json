@@ -1,0 +1,22 @@
+{
+  "loai": "B",
+  "ten": "b1_16500x36000",
+  "nhip": 16500,
+  "dai_nha": 36000,
+  "buoc_cot": 6000,
+  "tiet_dien_cot": "H300x150x6x9",
+  "ty_le": "auto",
+  "khung_ten": {
+    "don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP",
+    "cong_trinh": "NHÀ XƯỞNG SẢN XUẤT",
+    "chu_dau_tu": "CÔNG TY CP ĐẦU TƯ XÂY DỰNG",
+    "ten_ban_ve": "MẶT BẰNG LƯỚI TRỤC VÀ CỘT",
+    "ky_hieu_ban_ve": "KC-01",
+    "loai_ho_so": "BVTC",
+    "ngay": "18/11/2026",
+    "ky": [
+      {"chuc_danh": "Chủ nhiệm", "ho_ten": "Nguyễn Văn A"},
+      {"chuc_danh": "Thiết kế", "ho_ten": "Trần Thị B"}
+    ]
+  }
+}

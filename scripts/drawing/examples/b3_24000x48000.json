@@ -1,0 +1,18 @@
+{
+  "loai": "B",
+  "ten": "b3_24000x48000",
+  "nhip": 24000,
+  "dai_nha": 48000,
+  "buoc_cot": 8000,
+  "tiet_dien_cot": "H400x200x8x13",
+  "ty_le": "auto",
+  "khung_ten": {
+    "don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP",
+    "cong_trinh": "NHÀ XƯỞNG CƠ KHÍ",
+    "chu_dau_tu": "CÔNG TY CỔ PHẦN CƠ KHÍ CHẾ TẠO",
+    "ten_ban_ve": "MẶT BẰNG LƯỚI TRỤC VÀ CỘT",
+    "ky_hieu_ban_ve": "KC-01",
+    "loai_ho_so": "BVTC",
+    "ngay": "18/11/2026"
+  }
+}
