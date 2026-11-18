@@ -232,12 +232,12 @@ def ve(loai: str, spec, freecadcmd: list[str] | None = None) -> dict:
         if not chk.get("hop_le"):
             return dict(hop_le=False, loai=loai, loi=chk.get("loi", ["spec không hợp lệ."]))
         job = dict(job_id=job_id, loai=loai, ten=chk["ten"], trang_thai="dang_chay", bat_dau=time.strftime("%Y-%m-%d %H:%M:%S"), thu_muc=f"out\\{chk['ten']}\\",
-                   ty_le_du_kien=chk.get("ty_le"), canh_bao=chk.get("canh_bao", []), _t0=time.time())
+                   ty_le_du_kien=chk.get("ty_le"), canh_bao=chk.get("canh_bao", []), da_dung_mac_dinh=chk.get("da_dung_mac_dinh", []), _t0=time.time())
         _current = job
         _jobs[job_id] = job
         _save(job)
     threading.Thread(target=_worker, args=(job, norm, _env(freecadcmd)), name=f"banve-{job_id}", daemon=True).start()
-    return dict(hop_le=True, job_id=job_id, ten=chk["ten"], trang_thai="dang_chay", ty_le_du_kien=chk.get("ty_le"), canh_bao=chk.get("canh_bao", []), thu_muc=job["thu_muc"],
+    return dict(hop_le=True, job_id=job_id, ten=chk["ten"], trang_thai="dang_chay", ty_le_du_kien=chk.get("ty_le"), canh_bao=chk.get("canh_bao", []), da_dung_mac_dinh=chk.get("da_dung_mac_dinh", []), thu_muc=job["thu_muc"],
                 nhac="Mỗi bản vẽ mất khoảng 30-60 giây; gọi trang_thai_ban_ve(job_id) để xem tiến độ/kết quả.")
 
 

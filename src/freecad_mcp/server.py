@@ -92,7 +92,28 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
 
 mcp = FastMCP(
     "FreeCADMCP",
-    instructions="FreeCAD integration through the Model Context Protocol",
+    instructions=(
+        "FreeCAD integration through the Model Context Protocol.
+
+"
+        "BẢN VẼ KỸ THUẬT TCVN (cầu thang thép / lưới trục và cột / khung ngang) - khi khách nói bằng lời, làm đúng quy trình sau, trả lời bằng tiếng Việt:
+"
+        "1. Xác định loại: thang (cầu thang thép một vế), luoi_cot (mặt bằng lưới trục và cột), khung_ngang (mặt cắt ngang khung). Chưa rõ tham số thì gọi huong_dan_ve(loai).
+"
+        "2. Số BẮT BUỘC: thang = cao_tang, so_bac, be_rong_ve; luoi_cot = nhip, dai_nha, buoc_cot; khung_ngang = nhip, cao_cot, do_doc_mai, so_mai. "
+        "Thiếu số nào thì HỎI LẠI khách số đó, KHÔNG tự bịa hay suy đoán.
+"
+        "3. Số PHỤ (tiết diện, bề rộng mặt bậc, dầm cốn, bề dày tấm, tỷ lệ \"auto\", khung tên): dùng giá trị mặc định của công cụ và NÓI RÕ đã dùng giá trị nào "
+        "(kiem_tra_spec trả danh sách da_dung_mac_dinh). Khung tên: lấy từ lời khách nếu có, không thì dùng tên mẫu; không bao giờ bịa họ tên người ký.
+"
+        "4. LUÔN gọi kiem_tra_spec trước. Trình bày cho khách: bảng số liệu (kể cả số suy ra), tỷ lệ/bố cục đã chọn và lý do, các cảnh báo, các giá trị mặc định đã dùng. "
+        "Rồi CHỜ khách nói OK mới gọi ve_ban_ve; không tự vẽ khi chưa được đồng ý.
+"
+        "5. ve_ban_ve chạy nền (30-60 giây): lấy job_id rồi gọi trang_thai_ban_ve(job_id) cách vài giây cho tới khi xong. Chỉ một bản vẽ chạy một lúc.
+"
+        "6. Khi xong: báo đường dẫn các tệp (PDF, DXF, DWG, PNG) và kết quả kiểm tra tự động (đạt/không đạt, số mục, mục không đạt). Không tự làm tròn số; "
+        "gặp lỗi thì nêu nguyên giá trị sai và gợi ý số gần nhất mà công cụ đưa ra (ví dụ dai_nha không chia hết buoc_cot)."
+    ),
     lifespan=server_lifespan,
 )
 
@@ -869,6 +890,7 @@ def huong_dan_ve(ctx: Context, loai: str) -> list[TextContent]:
     """Hướng dẫn tham số để dựng bản vẽ kỹ thuật TCVN (A3, DXF + DWG + PDF + PNG), kèm một ví dụ spec JSON chạy được.
 
     Gọi TRƯỚC khi vẽ để biết tên tham số, đơn vị (mm), giá trị bắt buộc/tùy chọn/mặc định và các quy tắc báo lỗi.
+    Số bắt buộc thiếu thì phải HỎI LẠI khách, không tự bịa; số phụ dùng mặc định và nói rõ đã dùng giá trị nào.
 
     Args:
         loai: "thang" (cầu thang thép một vế: mặt bằng + mặt cắt dọc 1-1), "luoi_cot" (mặt bằng lưới trục và cột nhà thép)
@@ -882,7 +904,8 @@ def kiem_tra_spec(ctx: Context, loai: str, spec: dict[str, Any] | str) -> list[T
     """Chỉ KIỂM TRA spec bản vẽ, không dựng file (dưới vài giây, không mở FreeCAD).
 
     Trả lỗi tiếng Việt kèm giá trị sai (nếu có). Nếu hợp lệ: tỷ lệ và bố cục sẽ dùng cùng lý do chọn, các số đo suy ra (cao đỉnh, số bậc,
-    số cột...), và cảnh báo (làm tròn khi hiển thị, 2h+b ngoài 600-630 mm...). Nên gọi trước ve_ban_ve.
+    số cột...), cảnh báo (làm tròn khi hiển thị, 2h+b ngoài 600-630 mm...) và da_dung_mac_dinh (các giá trị phụ đã tự điền). Thiếu số bắt buộc thì trả
+    thieu_bat_buoc: HỎI LẠI khách. LUÔN gọi trước ve_ban_ve, trình bày kết quả cho khách và CHỜ khách đồng ý (OK) mới vẽ.
 
     Args:
         loai: "thang", "luoi_cot" hoặc "khung_ngang" (xem huong_dan_ve).
@@ -895,7 +918,7 @@ def kiem_tra_spec(ctx: Context, loai: str, spec: dict[str, Any] | str) -> list[T
 def ve_ban_ve(ctx: Context, loai: str, spec: dict[str, Any] | str) -> list[TextContent]:
     """Dựng bản vẽ (PDF + DXF + DWG + PNG) và chạy kiểm tra tự động, CHẠY NỀN (30-60 giây mỗi bản vẽ).
 
-    Trả ngay job_id; gọi trang_thai_ban_ve(job_id) để biết xong chưa. Chỉ một bản vẽ chạy một lúc (đang bận sẽ báo rõ).
+    CHỈ gọi sau khi đã kiem_tra_spec và khách đã đồng ý. Trả ngay job_id; gọi trang_thai_ban_ve(job_id) để biết xong chưa. Chỉ một bản vẽ chạy một lúc (đang bận sẽ báo rõ).
     Kết quả ghi vào out/<ten>/ trong thư mục fork. Spec sai sẽ trả lỗi tiếng Việt ngay, không dựng.
 
     Args:

@@ -21,11 +21,26 @@ LOAI = {"thang": "A", "luoi_cot": "B", "khung_ngang": "C"}
 EXAMPLE = {"thang": "a1_3600x20.json", "luoi_cot": "b2_12000x30000.json", "khung_ngang": "c1_12000x6000.json"}
 MAX_SPEC_BYTES = 20000
 
+# Mandatory numbers per type: when one is missing the answer is "ask the customer", never a guess.
+BAT_BUOC = {"thang": ("cao_tang", "so_bac", "be_rong_ve"), "luoi_cot": ("nhip", "dai_nha", "buoc_cot"), "khung_ngang": ("nhip", "cao_cot", "do_doc_mai", "so_mai")}
+# Secondary values used when the spec omits them (the answer lists every default that was applied so the assistant can tell the customer).
+# These are tool defaults taken from the examples, NOT values verified from a standard.
+MAC_DINH = {
+    "thang": {"be_rong_mat_bac": (250, "bước bậc b"), "dam_con": ("H60x120x2", "dầm cốn hộp rộng x cao x dày thành, mm"), "chieu_day_tam": (3, "mm, thép tấm mặt bậc"), "ty_le": ("auto", "tỷ lệ tự chọn")},
+    "luoi_cot": {"tiet_dien_cot": ("H250x125x6x9", "tiết diện cột"), "ty_le": ("auto", "tỷ lệ tự chọn")},
+    "khung_ngang": {"tiet_dien_cot": ("H250x125x6x9", "tiết diện cột"), "tiet_dien_keo": ("H250x125x6x9", "tiết diện kèo"), "ty_le": ("auto", "tỷ lệ tự chọn")},
+}
+# Title-block sample used when the customer gives no names (fictional placeholder text, as in the example specs).
+KHUNG_TEN_MAU = {"don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP", "chu_dau_tu": "CÔNG TY TNHH THƯƠNG MẠI ABC", "loai_ho_so": "BVTC"}
+CONG_TRINH_MAU = {"thang": "CẦU THANG THÉP", "luoi_cot": "NHÀ KHO TIỀN CHẾ", "khung_ngang": "NHÀ XƯỞNG KHUNG THÉP"}
+
 KHUNG_TEN = ("khung_ten (tùy chọn): {don_vi_tk, cong_trinh, chu_dau_tu, ten_ban_ve, ky_hieu_ban_ve, loai_ho_so, ngay (dd/mm/yyyy), o15, "
              "ky: [{chuc_danh, ho_ten}], chu_tri / kiem_tra / thiet_ke (true = chỉ in nhãn chức danh ở ô 8-14; chuỗi = họ tên do người dùng cung cấp; không có = để trống, "
              "hệ thống KHÔNG tự bịa tên người); tối đa 7 dòng. ky_hieu_ban_ve mặc định theo loại (thang KC-03, luoi_cot KC-01, khung_ngang KC-02). "
              "Chuỗi dài hơn ô khung tên sẽ báo lỗi (không tự thu nhỏ chữ); dùng dấu | để ngắt dòng.")
 COMMON_RULES = [
+    "SỐ BẮT BUỘC (thiếu thì HỎI LẠI khách, không tự bịa): thang = cao_tang, so_bac, be_rong_ve; luoi_cot = nhip, dai_nha, buoc_cot; khung_ngang = nhip, cao_cot, do_doc_mai, so_mai. "
+    "Các số còn lại có giá trị mặc định (xem mac_dinh); kiem_tra_spec trả da_dung_mac_dinh để nói rõ với khách.",
     "Mọi kích thước tính bằng mm. nhip, cao_cot, cao_tang... phải là số nguyên mm dương (không làm tròn âm thầm).",
     "ty_le: \"auto\" (mặc định, chọn tỷ lệ lớn nhất còn vừa khổ A3) hoặc 1:20, 1:25, 1:50, 1:100, 1:200, 1:500.",
     "Không tự xoay hình; nếu không vừa khung A3 (khung 390x277 trừ góc khung tên 180x65) sẽ báo lỗi kèm kích thước cần thiết.",
@@ -38,9 +53,9 @@ GUIDE = {
         tham_so=[
             dict(ten="cao_tang", don_vi="mm", bat_buoc=True, mo_ta="chiều cao từ sàn dưới đến sàn trên, số nguyên > 0"),
             dict(ten="so_bac", don_vi="bậc", bat_buoc=True, mo_ta="số lần nâng (số bậc cao), nguyên 2..200; số mặt bậc = so_bac − 1; chiều cao bậc h = cao_tang/so_bac (không làm tròn trong hình học)"),
-            dict(ten="be_rong_mat_bac", don_vi="mm", bat_buoc=True, mo_ta="bước bậc b (bề rộng mặt bậc theo phương chạy), số nguyên > 0"),
+            dict(ten="be_rong_mat_bac", don_vi="mm", bat_buoc=False, mac_dinh=250, mo_ta="bước bậc b (bề rộng mặt bậc theo phương chạy), số nguyên > 0"),
             dict(ten="be_rong_ve", don_vi="mm", bat_buoc=True, mo_ta="bề rộng vế thang, phải lớn hơn 2 lần bề rộng dầm cốn"),
-            dict(ten="dam_con", bat_buoc=True, mo_ta="dầm cốn hộp, dạng \"H60x120x2\" = rộng x cao x dày thành (mm); có 2 dầm cốn"),
+            dict(ten="dam_con", bat_buoc=False, mac_dinh="H60x120x2", mo_ta="dầm cốn hộp, dạng \"H60x120x2\" = rộng x cao x dày thành (mm); có 2 dầm cốn"),
             dict(ten="chieu_day_tam", don_vi="mm", bat_buoc=False, mac_dinh=3, mo_ta="chiều dày thép tấm mặt bậc (ghi chú \"THÉP TẤM DÀY n MM\")"),
             dict(ten="ty_le", bat_buoc=False, mac_dinh="auto", mo_ta="xem quy tắc chung"),
             dict(ten="bo_cuc", bat_buoc=False, mac_dinh="auto", mo_ta="\"auto\" | \"chong\" (mặt bằng dưới mặt cắt) | \"ngang\" (mặt bằng bên phải mặt cắt)"),
@@ -59,7 +74,8 @@ GUIDE = {
             dict(ten="nhip", don_vi="mm", bat_buoc=True, mo_ta="khoảng cách hai trục A và B, số nguyên > 0"),
             dict(ten="dai_nha", don_vi="mm", bat_buoc=True, mo_ta="chiều dài nhà; phải chia hết cho buoc_cot (không tự làm tròn)"),
             dict(ten="buoc_cot", don_vi="mm", bat_buoc=True, mo_ta="bước cột; số trục dọc N = dai_nha/buoc_cot + 1 (tối đa 100)"),
-            dict(ten="tiet_dien_cot", bat_buoc=True, mo_ta="\"H300x150x6x9\" (h x b x tw x tf) hoặc hộp \"100x50x2\" (h x b x t), mm"),
+            dict(ten="tiet_dien_cot", bat_buoc=False, mac_dinh="H250x125x6x9", mo_ta="\"H300x150x6x9\" (h x b x tw x tf) hoặc hộp \"100x50x2\" (h x b x t), mm"),
+            dict(ten="gom_nhan_tiet_dien", bat_buoc=False, mac_dinh=True, mo_ta="true: ghi 1 nhãn tiết diện + chú thích \"TẤT CẢ CỘT: ...\"; false: nhãn ở mọi cột"),
             dict(ten="ty_le", bat_buoc=False, mac_dinh="auto", mo_ta="xem quy tắc chung"),
             dict(ten="khung_ten", bat_buoc=False, mo_ta=KHUNG_TEN),
             dict(ten="tham_so", bat_buoc=False, mo_ta="ghi đè tham số bố cục (mm trên giấy)"),
@@ -75,8 +91,8 @@ GUIDE = {
             dict(ten="cao_cot", don_vi="mm", bat_buoc=True, mo_ta="từ cốt ±0.000 đến giao điểm trục cột và trục kèo"),
             dict(ten="do_doc_mai", don_vi="%", bat_buoc=True, mo_ta="độ dốc mái, 0 < i ≤ 100 (cho phép số lẻ như 13.3)"),
             dict(ten="so_mai", bat_buoc=True, mo_ta="1 hoặc 2. 2 mái: đỉnh giữa nhịp, cao đỉnh = cao_cot + nhip/2 × i. 1 mái: kèo dốc từ trục A (thấp) lên trục B, cao đỉnh = cao_cot + nhip × i"),
-            dict(ten="tiet_dien_cot", bat_buoc=True, mo_ta="\"H300x150x6x9\" hoặc hộp; chiều cao h là bề dày nét cột trên hình"),
-            dict(ten="tiet_dien_keo", bat_buoc=True, mo_ta="như trên, cho kèo"),
+            dict(ten="tiet_dien_cot", bat_buoc=False, mac_dinh="H250x125x6x9", mo_ta="\"H300x150x6x9\" hoặc hộp; chiều cao h là bề dày nét cột trên hình"),
+            dict(ten="tiet_dien_keo", bat_buoc=False, mac_dinh="H250x125x6x9", mo_ta="như trên, cho kèo"),
             dict(ten="ve_truc_cau_kien", bat_buoc=False, mac_dinh=False, mo_ta="true: vẽ thêm trục kèo (nét chấm gạch mảnh)"),
             dict(ten="ty_le", bat_buoc=False, mac_dinh="auto", mo_ta="xem quy tắc chung"),
             dict(ten="khung_ten", bat_buoc=False, mo_ta=KHUNG_TEN),
@@ -154,6 +170,21 @@ def check(loai: str, spec_path: str, write_spec: str | None, profile: str | None
         return dict(hop_le=False, loai=loai, loi=["spec phải là một đối tượng JSON {...}."])
     k = LOAI[loai]
     spec = dict(raw)
+    thieu = [x for x in BAT_BUOC[loai] if spec.get(x) is None]
+    if thieu:
+        return dict(hop_le=False, loai=loai, thieu_bat_buoc=thieu,
+                    loi=[f"Thiếu số bắt buộc: {', '.join(thieu)}. HÃY HỎI LẠI khách các số này (đơn vị mm trừ do_doc_mai là %, so_bac/so_mai là số đếm); không tự đoán."])
+    da_dung = []
+    for key, (val, note) in MAC_DINH[loai].items():
+        if spec.get(key) is None:
+            spec[key] = val
+            da_dung.append(dict(ten=key, gia_tri=val, y_nghia=note))
+    kt_in = spec.get("khung_ten")
+    if not kt_in:
+        import datetime
+        kt = dict(KHUNG_TEN_MAU, cong_trinh=CONG_TRINH_MAU[loai], ngay=datetime.date.today().strftime("%d/%m/%Y"))
+        spec["khung_ten"] = kt
+        da_dung.append(dict(ten="khung_ten", gia_tri=kt, y_nghia="khách chưa cung cấp: dùng tên mẫu (giả lập) và ngày hôm nay; ô họ tên người ký để trống"))
     spec["loai"] = k
     ten = auto_name(loai, spec)
     spec["ten"] = ten
@@ -177,7 +208,7 @@ def check(loai: str, spec_path: str, write_spec: str | None, profile: str | None
     if D.info.get("scale_plan") and D.info["scale_plan"] != D.scale:
         sc = f"mặt cắt 1:{D.scale}, mặt bằng 1:{D.info['scale_plan']}"
     res = dict(hop_le=True, loai=loai, ten=ten, ty_le=sc, bo_cuc=D.info.get("layout"), ly_do=D.info["reason"], so_do=_derived(loai, sp, D),
-               canh_bao=list(D.info.get("warnings", [])), thu_muc_ket_qua=f"out\\{ten}\\")
+               canh_bao=list(D.info.get("warnings", [])), da_dung_mac_dinh=da_dung, thu_muc_ket_qua=f"out\\{ten}\\")
     if k == "C":
         res["quy_uoc"] = D.info.get("convention")
     if write_spec:
