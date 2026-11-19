@@ -233,7 +233,7 @@ def check(loai: str, spec_path: str, write_spec: str | None, profile: str | None
     if D.info.get("scale_plan") and D.info["scale_plan"] != D.scale:
         sc = f"mặt cắt 1:{D.scale}, mặt bằng 1:{D.info['scale_plan']}"
     res = dict(hop_le=True, loai=loai, ten=ten, kho_giay=D.info.get("sheet", "A3"), ty_le=sc, bo_cuc=D.info.get("layout"), ly_do=D.info["reason"], so_do=_derived(loai, sp, D),
-               canh_bao=canh_bao_them + list(D.info.get("warnings", [])), da_dung_mac_dinh=da_dung, thu_muc_ket_qua=f"out\\{ten}\\")
+               canh_bao=canh_bao_them + list(D.info.get("warnings", [])) + list(D.info.get("notes", [])), da_dung_mac_dinh=da_dung, thu_muc_ket_qua=f"out\\{ten}\\")
     if k == "C":
         res["quy_uoc"] = D.info.get("convention")
     if write_spec:

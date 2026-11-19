@@ -29,12 +29,15 @@ try:
         treads.append(o)
     theta = math.atan2(h, b)
     off = bd / math.cos(theta)
-    shift = max(0.0, h - off)                # stringer shallower than one riser: lowered by h - off, its lower edge passes through the feet of the risers (same as the drawing)
-    if h - off >= 0:
-        poly = [(0, h - off - shift), (0, h - shift), (L, H - shift), (L, H - off - shift)]
+    # same strip as the drawing: lower edge through the feet of the risers ((0, 0) to (L, (n-1)h)), top edge `off` above it; deeper than one riser the top is cut flat at the upper
+    # floor level z = H (cap along z = H to x = L) and the left end is a vertical face x = 0 from 0 to off
+    snug = -1e-9 <= off - h <= 10.0 + 1e-9        # same rule as the drawing (spec_a.SNUG_MAX): deeper than one riser by at most 10 mm -> drawn exactly one riser high
+    off_d = h if snug else off
+    if off_d <= h + 1e-9:
+        poly = [(0, 0), (0, off_d), (L, (n - 1) * h + off_d), (L, (n - 1) * h)]
     else:
-        x0 = (off - h) * b / h
-        poly = [(0, 0), (0, h), (L, H), (L, H - off), (x0, 0)]
+        xt = (H - off) * b / h
+        poly = [(0, 0), (0, off), (xt, H)] + ([(L, H)] if L - xt > 1e-9 else []) + [(L, (n - 1) * h)]
     stringers = []
     for k, y0 in enumerate((0.0, w - bw), start=1):
         wire = Part.makePolygon([V(x, y0, z) for x, z in poly] + [V(poly[0][0], y0, poly[0][1])])

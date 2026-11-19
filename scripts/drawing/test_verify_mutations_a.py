@@ -261,8 +261,11 @@ def main():
         t = [p for p in Dm.prims if p.tag == "dam_label"][0]
         t.pos = (t.pos[0], t.pos[1] + 12.0)
     need({"1.17", "1.23"}, prim_check(mut(dam_label_on_stair), sp1), "prim_stringer_label_moved_onto_the_stair_lines")
-    # (13) the stringer strip and the steps. Default stringer H75x150x2 is deeper than one riser (o >= h): top edge on the nosing line, lower edge cut at the floor;
-    #      a shallower stringer (H60x120x2 here) is lowered by h - o so that the lower edge runs through the feet of the risers (1.24 / 2.15), the nosings then stand above it (1.25 / 2.16 = INFO)
+    # (13) the stringer strip and the steps. The lower edge ALWAYS runs through the feet of the risers from the origin (0, 0) to (L, (n-1)h); the top edge is the drawn depth od above it.
+    #      Snug (0 <= o - h <= 10 mm, o = bd / cos(theta); the default H75x150x2 on every valid example but a3): od = h, the top edge is the nosing line, no cap, no end line;
+    #      o - h > 10 mm: od = o, the top edge is cut flat at the upper floor level, cap along z = H to riser n, short end (0, h)-(0, o); o < h: the top edge lies h - o below the nosings (INFO)
+    import ban_ve_cli
+
     def alt_spec(**changes):
         raw_ = load_spec(os.path.join(EX, "a1_3600x20.json"))
         raw_.update(changes)
@@ -278,6 +281,29 @@ def main():
                     p.p2 = (p.p2[0], p.p2[1] + dz_real / sc)
         return fn
 
+    def tagged(Dx, tag):
+        return [q for q in Dx.prims if q.tag == tag]
+
+    def drop(tag):
+        def fn(Dm):
+            Dm.prims.remove(tagged(Dm, tag)[0])
+        return fn
+
+    def move_end(tag, which, dx_real, dz_real):
+        def fn(Dm):
+            sc = Dm.view_scale("section")
+            q = tagged(Dm, tag)[0]
+            c = getattr(q, which)
+            setattr(q, which, (c[0] + dx_real / sc, c[1] + dz_real / sc))
+        return fn
+
+    def add_line(tag, a_real, b_real):
+        def fn(Dm):
+            sc = Dm.view_scale("section")
+            ox_, oy_ = Dm.meta["section_origin"]
+            Dm.prims.append(Line(layer="NET-CHINH", tag=tag, p1=(ox_ + a_real[0] / sc, oy_ + a_real[1] / sc), p2=(ox_ + b_real[0] / sc, oy_ + b_real[1] / sc)))
+        return fn
+
     def dxf_expect(Dm, spx, Dx, name):
         px_ = os.path.join(work, name + ".dxf")
         render_dxf(Dm, profile, px_)
@@ -290,73 +316,126 @@ def main():
         verify_a.check_primitives_a(Cx, Dx, spx)
         return [c for c in Cx.items if c["id"] == cid][0]
 
+    def real_ends(Dx, tag):
+        sc = Dx.view_scale("section")
+        ox_, oy_ = Dx.meta["section_origin"]
+        q = tagged(Dx, tag)[0]
+        return [((c[0] - ox_) * sc, (c[1] - oy_) * sc) for c in (q.p1, q.p2)]
+
+    def full_prim_and_dxf(spx, Dx, name):
+        return prim_check(Dx, spx) | dxf_expect(Dx, spx, Dx, name)
+
+    def ends_close(a_, b_):
+        return all(abs(x - y) < 1e-6 for p_, q_ in zip(a_, b_) for x, y in zip(p_, q_))
+
     sp_s, D_s = alt_spec(dam_con="H60x120x2")                                  # shallow: o = 146.9 mm < h = 180 mm
+    sp_big, D_big = alt_spec(dam_con="H75x160x2")                              # o - h = 17 mm > 10: not snug, top cut flat at the floor, cap + short end
+    sp_eq, D_eq = alt_spec(be_rong_mat_bac=240, dam_con="H60x144x2")          # h = 180, b = 240: cos(theta) = 0.8, o = 144 / 0.8 = 180 = h exactly: snug without a note
+    sp_gt, D_gt = alt_spec(dam_con="H60x200x2")                                # o - h = 73 mm: not snug
+    sp_sh, D_sh = alt_spec(dam_con="H40x60x2")                                 # very shallow: o = 73 mm
+    sp_b10, D_b10 = alt_spec(be_rong_mat_bac=240, dam_con="H60x152x2")        # o - h = 10 mm exactly: snug (limit included)
+    sp_b11, D_b11 = alt_spec(be_rong_mat_bac=240, dam_con="H60x153x2")        # o - h = 11.25 mm: not snug
     shift_s = D_s.meta["stringer_shift"]
-    o1 = D1.meta["stringer_offset"]
-    expect("control_default_stringer_H75x150x2_is_deeper_than_one_riser_and_passes_everything", D1.meta["stringer_shift"] == 0.0 and o1 > sp1["h"] and not prim_check(D1, sp1)
-           and item(D1, sp1, "1.25")["ok"] is True and item(D1, sp1, "1.24")["ok"] is True, f"o = {o1:.2f} mm > h = {sp1['h']:.2f} mm; 1.25 {item(D1, sp1, '1.25')['ok']}; không đạt: {sorted(prim_check(D1, sp1))}")
-    expect("control_shallow_stringer_lowered_by_h_minus_o_covers_the_feet_1.25_is_info_only", shift_s > 20.0 and not prim_check(D_s, sp_s) and item(D_s, sp_s, "1.25")["ok"] is None
-           and "gợi ý" in item(D_s, sp_s, "1.25")["detail"] and item(D_s, sp_s, "1.24")["ok"] is True, f"hạ {shift_s:.2f} mm; {item(D_s, sp_s, '1.25')['detail'][:150]}")
+    h1, L1, H1 = sp1["h"], sp1["L"], sp1["cao_tang"]
+    o_big = D_big.meta["stringer_offset"]
+    slack_big = o_big - sp_big["h"]                                            # the top edge of the big stringer lies this far above the nosing line (real mm)
+    x0_old = slack_big * sp_big["b"] / sp_big["h"]
+
+    # ---- controls
+    expect("control_default_stringer_is_snug_edges_through_the_nosings_and_the_feet_nothing_else_drawn",
+           D1.meta["stringer_snug"] is True and not prim_check(D1, sp1) and item(D1, sp1, "1.32")["ok"] is True and item(D1, sp1, "1.25")["ok"] is True
+           and ends_close(real_ends(D1, "stringer_low"), [(0.0, 0.0), (L1, H1 - h1)]) and ends_close(real_ends(D1, "stringer_top"), [(0.0, h1), (L1, H1)])
+           and not tagged(D1, "stringer_cap") and not tagged(D1, "stringer_end") and not tagged(D1, "stringer_foot"),
+           f"snug {D1.meta['stringer_snug']}; mép dưới {real_ends(D1, 'stringer_low')}; mép trên {real_ends(D1, 'stringer_top')}; không đạt: {sorted(prim_check(D1, sp1))}")
+    expect("snug_note_in_report_info_1.33_and_in_the_spec_notes", item(D1, sp1, "1.33")["ok"] is None and "khít bậc" in item(D1, sp1, "1.33")["detail"] and len(sp1["ghi_chu"]) == 1, item(D1, sp1, "1.33")["detail"])
+    sp_t, D_t = alt_spec(cao_tang=3000, so_bac=17, be_rong_mat_bac=250, be_rong_ve=900)
+    want_note = "Dải dầm vẽ khít bậc, cao 144,2 mm vuông góc; tiết diện khai báo H75x150x2 cao hơn 5,8 mm"
+    tmp_spec = os.path.join(work, "thang_note.json")
+    json.dump(dict(cao_tang=3000, so_bac=17, be_rong_ve=900), open(tmp_spec, "w", encoding="utf-8"))
+    res_cli = ban_ve_cli.check("thang", tmp_spec, None, None)
+    expect("snug_note_text_is_computed_from_the_spec_and_shown_by_kiem_tra_spec", sp_t["ghi_chu"] == [want_note] and want_note in res_cli.get("canh_bao", []) and "H75x150x2" in " ".join(res_cli.get("canh_bao", [])),
+           f"spec: {sp_t['ghi_chu']}; kiem_tra_spec canh_bao: {res_cli.get('canh_bao')}")
+    expect("no_note_when_not_snug_or_when_exact", not sp_big["ghi_chu"] and not sp_eq["ghi_chu"] and not sp_s["ghi_chu"] and not sp_gt["ghi_chu"], f"{sp_big['ghi_chu']} {sp_eq['ghi_chu']}")
+    expect("control_big_stringer_not_snug_top_cut_flat_with_cap_and_end_passes_everything",
+           D_big.meta["stringer_snug"] is False and not prim_check(D_big, sp_big) and item(D_big, sp_big, "1.32")["ok"] is None and len(tagged(D_big, "stringer_cap")) == 1 and len(tagged(D_big, "stringer_end")) == 1
+           and not tagged(D_big, "stringer_foot") and ends_close([real_ends(D_big, "stringer_low")[0]], [(0.0, 0.0)]) and abs(real_ends(D_big, "stringer_top")[1][1] - H1) < 1e-9,
+           f"o - h = {slack_big:.2f} mm; không đạt: {sorted(prim_check(D_big, sp_big))}")
+    expect("control_shallow_stringer_top_below_the_nosings_covers_the_feet_1.25_is_info_only", shift_s > 20.0 and not prim_check(D_s, sp_s) and item(D_s, sp_s, "1.25")["ok"] is None
+           and "gợi ý" in item(D_s, sp_s, "1.25")["detail"] and item(D_s, sp_s, "1.24")["ok"] is True and ends_close([real_ends(D_s, "stringer_low")[0]], [(0.0, 0.0)])
+           and not tagged(D_s, "stringer_cap") and not tagged(D_s, "stringer_end") and item(D_s, sp_s, "1.32")["ok"] is None, f"hạ {shift_s:.2f} mm; {item(D_s, sp_s, '1.25')['detail'][:150]}")
     warn_s = [w for w in sp_s["warnings"] if "không che trọn bậc" in w]
     expect("soft_warning_for_a_shallow_stringer_names_the_needed_depth_and_a_suggestion", len(warn_s) == 1 and "cần >= 146.1 mm vuông góc" in warn_s[0] and "gợi ý H60x150x2" in warn_s[0] and not [w for w in sp1["warnings"] if "không che trọn" in w],
            warn_s[0][:170] if warn_s else "không có cảnh báo")
-    # P1 (shallow base): the lower edge through the feet
+    for nm, Dx, spx, snug_want in (("o_equals_h", D_eq, sp_eq, True), ("o_minus_h_exactly_10mm", D_b10, sp_b10, True), ("o_minus_h_11.25mm", D_b11, sp_b11, False), ("o_minus_h_73mm", D_gt, sp_gt, False), ("very_shallow", D_sh, sp_sh, False)):
+        bad_ = full_prim_and_dxf(spx, Dx, "ctl_" + nm)
+        cap_ = len(tagged(Dx, "stringer_cap"))
+        expect(f"stringer_{nm}_passes_everything_snug_{snug_want}", not bad_ and Dx.meta["stringer_snug"] is snug_want and bool(cap_) == (not snug_want and Dx.meta["stringer_offset"] > spx["h"]) and ends_close([real_ends(Dx, "stringer_low")[0]], [(0.0, 0.0)]),
+               f"o - h = {Dx.meta['stringer_offset'] - spx['h']:.3f} mm; snug {Dx.meta['stringer_snug']}; {cap_} nét nắp; không đạt: {sorted(bad_)}")
+
+    # ---- shallow base: the lower edge through the feet (behaviour unchanged)
     need({"1.24"}, prim_check(mut(move_stringer(1.0, ("stringer_low",)), D_s), sp_s), "prim_stringer_low_raised_1mm_corners_stick_out")
     need({"1.24", "1.6"}, prim_check(mut(move_stringer(1.0), D_s), sp_s), "prim_stringer_whole_strip_raised_1mm")
     need({"1.24", "1.6"}, prim_check(mut(move_stringer(shift_s), D_s), sp_s), "prim_stringer_back_at_the_old_position_top_on_the_nosing_line")
     need({"1.24", "1.6"}, prim_check(mut(move_stringer(shift_s + 146.0), D_s), sp_s), "prim_stringer_inverted_above_the_nosing_line")
     need({"1.6"}, prim_check(mut(move_stringer(-1.0, ("stringer_top",)), D_s), sp_s), "prim_stringer_top_edge_1mm_off_its_position")
-    # 1.25 (deep default stringer): the nosings must not stand above the top edge, the feet not hang below the lower edge
-    need({"1.25"}, prim_check(mut(move_stringer(-1.0, ("stringer_top",))), sp1), "prim_1.25_top_edge_lowered_1mm_nosings_stand_out")
-    slack = o1 - sp1["h"]                      # the default stringer is deeper than one riser by this much (real mm): raising the lower edge by less than it still covers the feet
-    need({"1.24"}, prim_check(mut(move_stringer(slack + 1.0, ("stringer_low",))), sp1), "prim_1.24_low_edge_raised_1mm_past_the_feet")
-    need({"1.25"}, prim_check(mut(move_stringer(slack + 1.0, ("stringer_low",))), sp1), "prim_1.25_low_edge_raised_1mm_past_the_feet")
-    expect("prim_1.25_low_edge_raised_by_less_than_the_slack_still_passes", not (prim_check(mut(move_stringer(slack - 0.5, ("stringer_low",))), sp1) & {"1.24", "1.25"}), f"dư {slack:.2f} mm; nâng {slack - 0.5:.2f} mm vẫn chứa chân bậc")
-    need({"1.24", "1.25"}, prim_check(mut(move_stringer(o1)), sp1), "prim_1.25_strip_inverted_above_the_nosing_line")
-    need({"1.25"}, prim_check(mut(move_stringer(-o1 / 2)), sp1), "prim_1.25_strip_lowered_by_half_its_depth")
-    expect("prim_1.25_top_edge_raised_1mm_still_passes", "1.25" not in prim_check(mut(move_stringer(1.0, ("stringer_top",))), sp1) - {"1.6"}, "mép trên cao thêm 1 mm vẫn chứa mũi bậc")
-    expect("prim_1.25_low_edge_lowered_1mm_still_passes", not (prim_check(mut(move_stringer(-1.0, ("stringer_low",))), sp1) & {"1.24", "1.25"}), "mép dưới thấp thêm 1 mm vẫn chứa chân bậc")
 
-    def full_prim_and_dxf(spx, Dx, name):
-        return prim_check(Dx, spx) | dxf_expect(Dx, spx, Dx, name)
-    sp_eq, D_eq = alt_spec(be_rong_mat_bac=240, dam_con="H60x144x2")          # h = 180, b = 240: cos(theta) = 0.8, o = 144 / 0.8 = 180 = h exactly
-    bad_eq = full_prim_and_dxf(sp_eq, D_eq, "o_eq_h")
-    expect("stringer_o_equals_h_passes_everything", not bad_eq and D_eq.meta["stringer_shift"] < 1e-9 and item(D_eq, sp_eq, "1.25")["ok"] is True,
-           f"o = {D_eq.meta['stringer_offset']:.6f}, h = {sp_eq['h']:.6f}, hạ {D_eq.meta['stringer_shift']:.2e}; 1.25 {item(D_eq, sp_eq, '1.25')['ok']}; không đạt: {sorted(bad_eq)}")
-    sp_gt, D_gt = alt_spec(dam_con="H60x200x2")                                # o = 200 / 0.8 = 253 mm > h = 180: top on the nosing line, lower edge cut at the floor
-    bad_gt = full_prim_and_dxf(sp_gt, D_gt, "o_gt_h")
-    low_gt = [p for p in D_gt.prims if p.tag == "stringer_low"][0]
-    expect("stringer_o_greater_than_h_passes_everything_and_keeps_the_floor_cut", not bad_gt and D_gt.meta["stringer_shift"] == 0.0 and low_gt.p1[1] == D_gt.meta["section_origin"][1] and low_gt.p1[0] > D_gt.meta["section_origin"][0]
-           and item(D_gt, sp_gt, "1.25")["ok"] is True,
-           f"o = {D_gt.meta['stringer_offset']:.2f} > h = {sp_gt['h']:.2f}; hạ {D_gt.meta['stringer_shift']}; mép dưới bắt đầu ở sàn: {low_gt.p1[1] == D_gt.meta['section_origin'][1]}; không đạt: {sorted(bad_gt)}")
-    sp_sh, D_sh = alt_spec(dam_con="H40x60x2")                                 # a very shallow stringer: o = 73 mm, lowered by 107 mm; INFO only
-    bad_sh = full_prim_and_dxf(sp_sh, D_sh, "shallow")
-    expect("stringer_much_shallower_than_h_passes_everything_1.25_info", not bad_sh and D_sh.meta["stringer_shift"] > 100.0 and item(D_sh, sp_sh, "1.25")["ok"] is None, f"hạ {D_sh.meta['stringer_shift']:.2f} mm; không đạt: {sorted(bad_sh)}")
-    need({"1.24"}, prim_check(mut(move_stringer(120.0, ("stringer_low",)), D_gt), sp_gt), "prim_stringer_o_gt_h_lower_edge_raised_120mm")
-    expect("stringer_o_gt_h_lower_edge_raised_1mm_still_covers", not (prim_check(mut(move_stringer(1.0, ("stringer_low",)), D_gt), sp_gt) & {"1.24"}), "mép dưới nâng 1 mm vẫn che chân bậc (còn dư)")
-    # (14) strip closed at the foot: a lower edge cut at the floor needs the bottom line from (0, 0) to the start of the lower edge (1.26 / 2.17); a stringer that is not cut needs none
-    def foot_prims(Dx):
-        return [q for q in Dx.prims if q.tag == "stringer_foot"]
-    f1 = foot_prims(D1)
-    expect("control_default_stringer_has_one_bottom_line_from_the_foot_of_riser_1_to_the_cut", len(f1) == 1 and f1[0].layer == "NET-CHINH" and item(D1, sp1, "1.26")["ok"] is True
-           and abs((f1[0].p2[0] - f1[0].p1[0]) * D1.view_scale("section") - (o1 - sp1["h"]) * sp1["b"] / sp1["h"]) < 1e-6,
-           f"{len(f1)} nét đáy dài {(f1[0].p2[0] - f1[0].p1[0]) * D1.view_scale('section'):.3f} mm thật (cần (o − h)·b/h = {(o1 - sp1['h']) * sp1['b'] / sp1['h']:.3f})" if f1 else "không có nét đáy")
+    # ---- snug base (D1): top edge through the nosings, lower edge through the feet, both within 0.01 mm; ends on the risers; nothing else (1.32 / 2.21, 1.29 / 2.20)
+    snug_cat = [
+        ("top_edge_1mm_above_the_nosings", move_stringer(1.0, ("stringer_top",)), {"1.32"}, {"2.21"}),
+        ("top_edge_1mm_below_the_nosings", move_stringer(-1.0, ("stringer_top",)), {"1.32", "1.25"}, {"2.21", "2.16"}),
+        ("lower_edge_1mm_above_the_feet", move_stringer(1.0, ("stringer_low",)), {"1.32", "1.24"}, {"2.21", "2.15"}),
+        ("lower_edge_1mm_below_the_feet", move_stringer(-1.0, ("stringer_low",)), {"1.32"}, {"2.21"}),
+        ("lower_edge_starts_1mm_right_of_the_origin", move_end("stringer_low", "p1", 1.0, 0.0), {"1.27", "1.32"}, {"2.18", "2.21"}),
+        ("lower_edge_starts_1mm_above_the_origin", move_end("stringer_low", "p1", 0.0, 1.0), {"1.27", "1.32"}, {"2.18", "2.21"}),
+        ("extra_cap_line_left_over", add_line("stringer_cap", (L1 - 10.0, H1), (L1, H1)), {"1.29", "1.32"}, {"2.20"}),
+        ("extra_short_end_line_left_over", add_line("stringer_end", (0.0, h1), (0.0, h1 + 3.0)), {"1.29", "1.32"}, {"2.20"}),
+        ("old_bottom_line_left_over", add_line("stringer_foot", (0.0, 0.0), (10.0, 0.0)), {"1.29", "1.32"}, {"2.20"}),
+        ("top_edge_ends_1mm_short_of_the_corner_of_the_upper_floor", move_end("stringer_top", "p2", -1.0, 0.0), {"1.32", "1.26"}, {"2.21", "2.17"}),
+        ("top_edge_pokes_1mm_above_the_upper_floor", move_end("stringer_top", "p2", 0.0, 1.0), {"1.28", "1.32"}, {"2.19", "2.21"}),
+    ]
+    for nm, fn_, pids, dids in snug_cat:
+        need(pids, prim_check(mut(fn_), sp1), f"prim_snug_{nm}")
+    expect("prim_1.32_edges_0.005mm_off_still_pass", "1.32" not in prim_check(mut(move_stringer(0.005, ("stringer_top",))), sp1) - {"1.6", "1.29"}, "lệch 0,005 mm nằm trong ngưỡng 0,01")
+    need({"1.24", "1.25"}, prim_check(mut(move_stringer(h1)), sp1), "prim_snug_strip_inverted_above_the_nosing_line")
+    need({"1.25"}, prim_check(mut(move_stringer(-h1 / 2)), sp1), "prim_snug_strip_lowered_by_half_its_depth")
 
-    def drop_foot(Dm):
-        Dm.prims.remove(foot_prims(Dm)[0])
+    # ---- big (not snug) base: the top edge o - h above the nosings, cut flat at the floor, cap + short end; lower edge at the origin; nothing above the floor; closed at both ends
+    def old_geometry_low(Dm):                                                  # lower edge starting on the floor at x0 as before, plus the old bottom line
+        move_end("stringer_low", "p1", x0_old, 0.0)(Dm)
+        add_line("stringer_foot", (0.0, 0.0), (x0_old, 0.0))(Dm)
 
-    def shorten_foot(dx_real):
+    def top_untruncated(Dm):                                                   # the strip rises above the upper floor: top edge to (L, H + o - h), no cap
+        sc = Dm.view_scale("section")
+        q = tagged(Dm, "stringer_top")[0]
+        q.p2 = (Dm.meta["section_origin"][0] + sp_big["L"] / sc, Dm.meta["section_origin"][1] + (sp_big["cao_tang"] + slack_big) / sc)
+        Dm.prims.remove(tagged(Dm, "stringer_cap")[0])
+
+    def cap_shorter(dx_real):
         def fn(Dm):
-            f_ = foot_prims(Dm)[0]
-            f_.p2 = (f_.p2[0] - dx_real / Dm.view_scale("section"), f_.p2[1])
+            sc = Dm.view_scale("section")
+            q = tagged(Dm, "stringer_cap")[0]
+            q.p1 = (q.p1[0] + dx_real / sc, q.p1[1])
         return fn
-    need({"1.26"}, prim_check(mut(drop_foot), sp1), "prim_1.26_bottom_line_missing")
-    need({"1.26"}, prim_check(mut(shorten_foot(1.0)), sp1), "prim_1.26_bottom_line_1mm_too_short")
-    need({"1.26"}, prim_check(mut(drop_foot, D_gt), sp_gt), "prim_1.26_bottom_line_missing_H60x200")
-    expect("prim_1.26_bottom_line_shorter_by_1e-8_mm_still_passes", "1.26" not in prim_check(mut(shorten_foot(1e-8)), sp1), "khe hở 1e-8 mm nằm trong ngưỡng 1e-6")
-    expect("stringer_not_cut_at_the_floor_needs_no_bottom_line_1.26_passes", not foot_prims(D_s) and not foot_prims(D_eq) and item(D_s, sp_s, "1.26")["ok"] is True and item(D_eq, sp_eq, "1.26")["ok"] is True
-           and item(D_s, sp_s, "1.26")["detail"].count("không cắt") == 1 and len(foot_prims(D_gt)) == 1 and item(D_gt, sp_gt, "1.26")["ok"] is True,
-           f"nông: {len(foot_prims(D_s))} nét đáy; o = h: {len(foot_prims(D_eq))}; H60x200: {len(foot_prims(D_gt))}")
+    big_cat = [
+        ("lower_edge_starts_1mm_right_of_the_origin", move_end("stringer_low", "p1", 1.0, 0.0), {"1.27"}, {"2.18"}),
+        ("lower_edge_starts_1mm_above_the_origin", move_end("stringer_low", "p1", 0.0, 1.0), {"1.27"}, {"2.18"}),
+        ("old_bottom_line_still_there", add_line("stringer_foot", (0.0, 0.0), (x0_old, 0.0)), {"1.29"}, {"2.20"}),
+        ("old_geometry_lower_edge_on_the_floor_at_x0_with_the_old_bottom_line", old_geometry_low, {"1.27", "1.29"}, {"2.18", "2.20"}),
+        ("strip_pokes_above_the_upper_floor", top_untruncated, {"1.28", "1.26", "1.29"}, {"2.19", "2.17", "2.20"}),
+        ("open_at_the_top_cap_missing", drop("stringer_cap"), {"1.26", "1.29"}, {"2.17", "2.20"}),
+        ("open_at_the_top_cap_1mm_short", cap_shorter(1.0), {"1.26", "1.29"}, {"2.17", "2.20"}),
+        ("open_at_the_top_edge_1mm_short_of_the_floor", move_end("stringer_top", "p2", -1.0, 0.0), {"1.26"}, {"2.17"}),
+        ("open_at_the_foot_short_end_missing", drop("stringer_end"), {"1.26", "1.29"}, {"2.17", "2.20"}),
+        ("top_edge_1mm_above_its_place", move_stringer(1.0, ("stringer_top",)), {"1.6", "1.29"}, {"2.7", "2.20"}),
+    ]
+    for nm, fn_, pids, dids in big_cat:
+        need(pids, prim_check(mut(fn_, D_big), sp_big), f"prim_big_{nm}")
+    need({"1.25"}, prim_check(mut(move_stringer(-(slack_big + 1.0), ("stringer_top",)), D_big), sp_big), "prim_big_1.25_top_edge_lowered_1mm_below_the_nosings")
+    expect("prim_big_1.25_top_edge_lowered_by_less_than_its_slack_still_passes", "1.25" not in prim_check(mut(move_stringer(-(slack_big - 0.5), ("stringer_top",)), D_big), sp_big) - {"1.6", "1.29"},
+           f"mép trên cao hơn mũi bậc {slack_big:.2f} mm; hạ {slack_big - 0.5:.2f} mm vẫn chứa mũi bậc")
+    need({"1.24"}, prim_check(mut(move_stringer(120.0, ("stringer_low",)), D_gt), sp_gt), "prim_stringer_o_gt_h_lower_edge_raised_120mm")
+    expect("prim_1.27_lower_edge_starts_0.05mm_off_the_origin_still_passes", "1.27" not in prim_check(mut(move_end("stringer_low", "p1", 0.05, 0.0), D_big), sp_big), "sai số 0,1 mm thật cho phép")
+    expect("prim_1.28_nothing_above_the_floor_on_every_kind_of_stringer", all(item(Dx, spx, "1.28")["ok"] is True for Dx, spx in ((D1, sp1), (D_s, sp_s), (D_eq, sp_eq), (D_gt, sp_gt), (D_big, sp_big))), "1.28 đạt ở dầm khít / sâu / nông / vừa đúng")
     # (11) item 4: clear gap between step numbers and lines
     def steps_back_inside_cells(Dm):                  # the old layout: numbers between the tread lines (0.4-0.9 mm from them at 1:50)
         r_ = [p for p in Dm.prims if p.tag == "plan_outline"][0]
@@ -419,17 +498,17 @@ def main():
 
     need({"2.7", "2.9", "2.5"}, dxf_of(mut(wrong_h), "dxf_wrong_h"), "dxf_wrong_h_one_riser")
     need({"2.5", "2.7"}, dxf_of(mut(stringer_on_keo), "dxf_stringer_on_keo"), "dxf_stringer_on_layer_KEO")
-    need({"2.16", "2.7"}, dxf_of(mut(move_stringer(-1.0, ("stringer_top",))), "dxf_top_edge_lowered_1mm"), "dxf_2.16_top_edge_lowered_1mm_nosings_stand_out")
-    need({"2.15"}, dxf_of(mut(move_stringer(slack + 1.0, ("stringer_low",))), "dxf_low_edge_raised_1mm_past_the_feet"), "dxf_2.15_low_edge_raised_1mm_past_the_feet")
-    need({"2.16"}, dxf_of(mut(move_stringer(slack + 1.0, ("stringer_low",))), "dxf_low_edge_raised_1mm_past_the_feet_b"), "dxf_2.16_low_edge_raised_1mm_past_the_feet")
-    need({"2.15", "2.16"}, dxf_of(mut(move_stringer(o1)), "dxf_stringer_inverted"), "dxf_stringer_inverted_above_the_nosing_line")
-    need({"2.16"}, dxf_of(mut(move_stringer(-o1 / 2)), "dxf_stringer_lowered_half"), "dxf_2.16_strip_lowered_by_half_its_depth")
+    for nm, fn_, pids, dids in snug_cat:
+        need(dids, dxf_of(mut(fn_), "dxf_snug_" + nm), f"dxf_snug_{nm}")
+    expect("dxf_2.21_edges_0.005mm_off_still_pass", "2.21" not in dxf_of(mut(move_stringer(0.005, ("stringer_top",))), "dxf_snug_0.005"), "lệch 0,005 mm nằm trong ngưỡng 0,01")
+    need({"2.15", "2.16"}, dxf_of(mut(move_stringer(h1)), "dxf_snug_inverted"), "dxf_snug_strip_inverted_above_the_nosing_line")
+    need({"2.16"}, dxf_of(mut(move_stringer(-h1 / 2)), "dxf_snug_lowered_half"), "dxf_snug_strip_lowered_by_half_its_depth")
     need({"2.15", "2.7"}, dxf_expect(mut(move_stringer(1.0, ("stringer_low",)), D_s), sp_s, D_s, "dxf_shallow_low_raised_1mm"), "dxf_shallow_stringer_low_raised_1mm_corners_stick_out")
     need({"2.15", "2.7"}, dxf_expect(mut(move_stringer(shift_s), D_s), sp_s, D_s, "dxf_shallow_old_position"), "dxf_shallow_stringer_back_at_the_old_position")
-    expect("dxf_2.16_top_edge_raised_1mm_still_passes", "2.16" not in dxf_of(mut(move_stringer(1.0, ("stringer_top",))), "dxf_top_edge_raised_1mm"), "mép trên cao thêm 1 mm vẫn chứa mũi bậc")
-    need({"2.17"}, dxf_of(mut(drop_foot), "dxf_bottom_line_missing"), "dxf_2.17_bottom_line_missing")
-    need({"2.17"}, dxf_of(mut(shorten_foot(1.0)), "dxf_bottom_line_1mm_too_short"), "dxf_2.17_bottom_line_1mm_too_short")
-    expect("dxf_2.17_shallow_and_o_equals_h_need_no_bottom_line", "2.17" not in dxf_expect(D_s, sp_s, D_s, "dxf_shallow_ok") and "2.17" not in dxf_expect(D_eq, sp_eq, D_eq, "dxf_eq_ok"), "không cần nét đáy khi dầm không bị cắt tại sàn")
+    for nm, fn_, pids, dids in big_cat:
+        need(dids, dxf_expect(mut(fn_, D_big), sp_big, D_big, "dxf_big_" + nm), f"dxf_big_{nm}")
+    need({"2.16"}, dxf_expect(mut(move_stringer(-(slack_big + 1.0), ("stringer_top",)), D_big), sp_big, D_big, "dxf_big_low_top"), "dxf_big_2.16_top_edge_lowered_1mm_below_the_nosings")
+    expect("dxf_2.18_lower_edge_starts_0.05mm_off_the_origin_still_passes", "2.18" not in dxf_expect(mut(move_end("stringer_low", "p1", 0.05, 0.0), D_big), sp_big, D_big, "dxf_big_low_0.05"), "sai số 0,1 mm thật cho phép")
     need({"2.7", "2.9"}, dxf_of(mut(wrong_b), "dxf_wrong_b"), "dxf_wrong_b_tread")
     need({"2.7", "2.9"}, dxf_of(mut(wrong_level), "dxf_wrong_level"), "dxf_level_line_off")
     need({"2.6", "2.8", "2.9"}, dxf_of(mut(wrong_note), "dxf_wrong_note"), "dxf_note_text_wrong")

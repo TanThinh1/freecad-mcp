@@ -27,6 +27,7 @@ DEFAULT_PARAMS_A.update(
 )
 # parameters that are not paper lengths but real mm thresholds
 REAL_MM_PARAMS = ("nguong_2hb_min", "nguong_2hb_max")
+SNUG_MAX = 10.0          # a stringer deeper than one riser by at most this much (vertical, real mm) is drawn "snug": exactly one riser high, edges through the nosings and the feet
 BO_CUC = ("auto", "chong", "ngang")      # sheet arrangement: automatic, plan below the section, plan beside the section
 
 
@@ -99,5 +100,9 @@ def validate(spec) -> dict:
         z = math.ceil(need_bd / 10 - 1e-9) * 10
         warnings.append(f"dầm cao {ds['bd']:g} mm không che trọn bậc, cần >= {need_bd:.1f} mm vuông góc (gợi ý H{ds['bw']:g}x{z:g}x{ds['t']:g}). "
                         f"Bản vẽ vẫn che hết chân bậc (dải dầm được hạ xuống) nhưng mũi bậc nhô lên khỏi mép trên dầm {h - ds['bd'] * math.hypot(b, h) / b:.1f} mm.")
+    ghi_chu = []
+    o_dec = ds["bd"] * math.hypot(b, h) / b                  # declared vertical depth of the stringer (o = bd / cos theta)
+    if -1e-9 <= o_dec - h <= SNUG_MAX + 1e-9 and ds["bd"] - need_bd > 0.05:
+        ghi_chu.append(f"Dải dầm vẽ khít bậc, cao {need_bd:.1f} mm vuông góc; tiết diện khai báo {ds['text']} cao hơn {ds['bd'] - need_bd:.1f} mm".replace(".", ","))
     return dict(loai="A", ten=ten, cao_tang=H, so_bac=n, b=b, w=w, t=float(t), dam_con=ds, ty_le=ty_le, scale=scale, bo_cuc=bo_cuc, ty_le_rieng=rieng, khung_ten=kt, params=params,
-                h=h, L=(n - 1) * b, n_treads=n - 1, theta_deg=math.degrees(math.atan2(h, b)), two_h_b=two_h_b, warnings=warnings)
+                h=h, L=(n - 1) * b, n_treads=n - 1, theta_deg=math.degrees(math.atan2(h, b)), two_h_b=two_h_b, warnings=warnings, ghi_chu=ghi_chu)

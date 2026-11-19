@@ -5,9 +5,11 @@ Geometry (real mm, run direction +x, elevation z, width y):
   Section (cut along the stair axis, looking toward +y): saw-tooth profile  riser i at x = (i-1)b from z = (i-1)h to i h,
   tread i at z = i h from x = (i-1)b to i b; floors at z = 0 (x <= 0) and z = H (x >= L); two box stringers (visible, behind
   the cut plane) under the nosing line z = h + (h/b) x; level lines (CENTER) at z = 0 and z = H with level symbols.
-  Stringer position: its vertical depth is o = bd / cos(theta). Deeper than one riser (o >= h): top edge on the nosing line, lower edge o below it (cut at the floor
-  z = 0). Shallower (o < h): the whole strip is lowered by h - o so that its lower edge runs through the feet of the risers ((i-1)b, (i-1)h) and no inner corner
-  sticks out below the stringer (the nosings then stand h - o above its top edge); the strip keeps its depth o.
+  Stringer position: its vertical depth is o = bd / cos(theta) and its lower edge ALWAYS runs through the feet of the risers ((i-1)b, (i-1)h), i.e. from the origin (0, 0)
+  to (L, (n-1)h); the top edge is parallel, o above it. Shallower than one riser (o < h): the top edge lies h - o below the nosing line (the nosings stand above it). Deeper by at
+  most SNUG_MAX (0 <= o - h <= 10 mm, includes o = h): drawn "snug", exactly h high: the top edge is the nosing line, the strip ends on riser 1 (x = 0) and riser n (x = L), nothing
+  else is drawn. Deeper by more: the top edge lies o - h above the nosing line and is cut flat at the upper floor level z = H (a short cap along z = H from the cut to riser n,
+  so the strip never rises above the floor) and closed on the left by a short vertical end (0, h) - (0, o) in line with riser 1.
   Plan: rectangle L x w, tread edges, hidden inner stringer edges, step numbers 1..n-1, UP arrow, section mark 1-1.
 Two independent blocks (section block with its title/notes, plan block with its dimensions/title) are placed on the A3 sheet in one of
 two arrangements: "chong" (plan below the section, x = 0 of both views on one vertical axis) or "ngang" (plan to the right of the section,
@@ -24,6 +26,7 @@ import math
 import titleblock as TBK
 from primitives import Circle, Dim, Drawing, Line, Rect, Text, cap_to_em, drawing_extent, expand_dim, fmt_dec, fmt_value
 from scale import SCALES, ScaleReject, place_rects
+from spec_a import SNUG_MAX
 from spec_b import SpecError
 from tcvn import LAYER_DIM, LAYER_FRAME, LAYER_TEXT, LAYER_THIN, est_width
 
@@ -82,31 +85,33 @@ def section_block(sp: dict, s: int):
     dims: list[Dim] = []
     theta = math.atan2(h, b)
     o = ds["bd"] / math.cos(theta)           # vertical depth of the stringer strip (real mm)
-    shift = max(0.0, h - o)                  # a stringer shallower than one riser is lowered by h - o: its lower edge then passes through the feet of the risers
-    if H - o < 0:
-        raise SpecError([f"dam_con cao {ds['bd']:g} mm quá lớn so với cao_tang = {H:g} mm (mép dưới dầm cốn ở đầu trên thấp hơn sàn dưới)."])
+    shift = max(0.0, h - o)                  # a stringer shallower than one riser: its top edge lies h - o below the nosing line (the lower edge passes through the riser feet in every case)
+    if H - o < 1e-6:
+        raise SpecError([f"dam_con cao {ds['bd']:g} mm quá lớn so với cao_tang = {H:g} mm (dải dầm cốn cao hơn cả tầng, không còn mép trên dưới sàn tầng trên)."])
     add(Line(layer=LAYER_MAIN, tag="floor_lower", p1=(-stub, 0.0), p2=(0.0, 0.0)))
     add(Line(layer=LAYER_MAIN, tag="floor_upper", p1=(X(L), X(H)), p2=(X(L) + stub, X(H))))
     for i in range(1, n + 1):
         add(Line(layer=LAYER_MAIN, tag="riser", p1=(X((i - 1) * b), X((i - 1) * h)), p2=(X((i - 1) * b), X(i * h))))
     for i in range(1, n):
         add(Line(layer=LAYER_MAIN, tag="tread", p1=(X((i - 1) * b), X(i * h)), p2=(X(i * b), X(i * h))))
-    # stringers (visible behind the cut plane): top edge (the nosing line, lowered by `shift` when o < h) and the parallel lower edge o below it
-    add(Line(layer=LAYER_STRINGER, tag="stringer_top", p1=(X(0.0), X(h - shift)), p2=(X(L), X(H - shift))))
-    if h - o >= 0:
-        low0 = (0.0, h - o - shift)          # o <= h: the foot of riser 1, on the floor line
-    else:
-        low0 = ((o - h) * b / h, 0.0)
-    add(Line(layer=LAYER_STRINGER, tag="stringer_low", p1=(X(low0[0]), X(low0[1])), p2=(X(L), X(H - o - shift))))
-    if low0[0] > 1e-6:                       # lower edge cut at the floor (stringer deeper than one riser): the bottom of the strip along the floor closes it at the foot of riser 1
-        add(Line(layer=LAYER_STRINGER, tag="stringer_foot", p1=(0.0, 0.0), p2=(X(low0[0]), 0.0)))
-    if o > h and H - o < (n - 1) * h:
-        add(Line(layer=LAYER_STRINGER, tag="stringer_end", p1=(X(L), X(H - o)), p2=(X(L), X((n - 1) * h))))
+    # stringers (visible behind the cut plane): the lower edge runs through the feet of the risers, from the origin to (L, (n-1)h); the top edge is o above it
+    low0, low1 = (0.0, 0.0), (L, (n - 1) * h)
+    snug = -1e-9 <= o - h <= SNUG_MAX + 1e-9      # deeper than one riser by at most SNUG_MAX (o = h included): drawn exactly one riser high, edges through the nosings and the feet
+    od = h if snug else o                          # the drawn vertical depth
+    add(Line(layer=LAYER_STRINGER, tag="stringer_low", p1=(X(low0[0]), X(low0[1])), p2=(X(low1[0]), X(low1[1]))))
+    if od <= h + 1e-9:                       # o < h, or snug: the top edge reaches x = L on riser n (snug / o = h: it is the nosing line)
+        add(Line(layer=LAYER_STRINGER, tag="stringer_top", p1=(X(0.0), X(od)), p2=(X(L), X(low1[1] + od))))
+    else:                                    # o > h: the top edge is cut flat at the upper floor level, closed by a cap along z = H up to riser n, and on the left by an end in line with riser 1
+        xt = (H - o) * b / h
+        add(Line(layer=LAYER_STRINGER, tag="stringer_top", p1=(X(0.0), X(o)), p2=(X(xt), X(H))))
+        if L - xt > 1e-9:
+            add(Line(layer=LAYER_STRINGER, tag="stringer_cap", p1=(X(xt), X(H)), p2=(X(L), X(H))))
+        add(Line(layer=LAYER_STRINGER, tag="stringer_end", p1=(0.0, X(h)), p2=(0.0, X(o))))
     # stringer section label with a leader pointing at the lower edge of the stringer (free space below the stair); text size = the existing note size
     cap_n0 = P["cao_chu_ghi_chu"]
     lbl = f"DẦM CỐN {ds['text']}"
     w_lbl = est_width(lbl, cap_to_em(cap_n0))
-    px, pz = X(low0[0] + (L - low0[0]) * 0.5), X(low0[1] + ((H - o - shift) - low0[1]) * 0.5)          # mid-point of the lower edge
+    px, pz = X((low0[0] + low1[0]) / 2), X((low0[1] + low1[1]) / 2)          # mid-point of the lower edge
     lead = 7.0
     if px + lead + 1.0 + w_lbl <= X(L) + 6.0:
         qx, tx, ha = px + lead, px + lead + 1.0, "left"
@@ -163,7 +168,7 @@ def section_block(sp: dict, s: int):
     for txt in notes:
         y -= 4.5
         add(Text(layer=LAYER_TEXT, tag="note", s=txt, pos=(xc, y), h=cap_n, halign="center"))
-    meta = dict(notes=notes, h_text=h_txt, angle_text=f"GÓC DỐC {fmt_dec(th_deg, 1)}°", stringer_offset=o, stringer_shift=shift, scale=s, title_y=y_title)
+    meta = dict(notes=notes, h_text=h_txt, angle_text=f"GÓC DỐC {fmt_dec(th_deg, 1)}°", stringer_offset=o, stringer_shift=shift, stringer_snug=snug, stringer_draw_depth=od, scale=s, title_y=y_title)
     return ov, dims, meta
 
 
@@ -372,6 +377,6 @@ def build(sp: dict, profile: dict) -> Drawing:
     ux1 = max(r[2] for r in res["rects"]) + tx
     uy0 = min(r[1] for r in res["rects"]) + ty
     uy1 = max(r[3] for r in res["rects"]) + ty
-    D.info = dict(scale=s, scale_plan=s_pl, layout=kind, reason=_reason(res, sp), band="L", N=sp["so_bac"], n_columns=sp["n_treads"], warnings=sp["warnings"], params=P, h=sp["h"],
+    D.info = dict(scale=s, scale_plan=s_pl, layout=kind, reason=_reason(res, sp), band="L", N=sp["so_bac"], n_columns=sp["n_treads"], warnings=sp["warnings"], notes=sp.get("ghi_chu", []), params=P, h=sp["h"],
                   extents_paper=(res["union"][0], res["union"][1]), extent_sheet=(ux0, uy0, ux1, uy1), needs={f"{k}/1:{s_}": v for (k, s_), v in res["needs"].items()})
     return D

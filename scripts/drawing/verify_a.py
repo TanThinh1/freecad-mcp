@@ -89,16 +89,16 @@ def check_primitives_a(C: Checks, D, sp):
     ang = by("angle_text")
     ang_ok = len(ang) == 1 and ang[0].s == X["angle"] and close(ang[0].rot, math.degrees(math.atan(h / b)), 1e-9)
     dist_ok = pos_ok = False
-    shift = max(0.0, h - ds["bd"] / math.cos(math.atan(h / b)))        # a stringer shallower than one riser is lowered by h - o (o = bd / cos theta)
+    ex6 = _strip_expect(sp)                  # lower edge through the riser feet; top edge o above it, cut flat at the upper floor level when o > h
     if len(low) == 1 and len(top) == 1:
         (xt1, zt1), (xt2, zt2) = R(top[0].p1), R(top[0].p2)
         x2, z2 = R(low[0].p2)
-        z_top = zt1 + (zt2 - zt1) * (x2 - xt1) / (xt2 - xt1) if xt2 != xt1 else float("nan")        # the drawn top edge, measured where the lower edge ends
-        dist_ok = close((z_top - z2) * math.cos(math.atan(h / b)), ds["bd"], TOL)
-        pos_ok = close(zt1, h - shift, TOL) and close(zt2, H - shift, TOL) and close(xt1, 0.0, TOL) and close(xt2, L, TOL)
-    C.add(1, "1.6", "góc dốc = atan(h/b) (đo trên dầm cốn), chữ góc 1 chữ số thập phân; khoảng cách hai mép dầm cốn = chiều cao hộp; mép trên dầm = đường mũi bậc hạ xuống max(0, h − o)",
+        z_top = zt1 + (zt2 - zt1) * (x2 - xt1) / (xt2 - xt1) if xt2 != xt1 else float("nan")        # the line of the drawn top edge, measured where the lower edge ends
+        dist_ok = close(z_top - z2, ex6["od"], TOL)                      # vertical distance of the two edges = the drawn depth (o = bd / cos theta; snug: h)
+        pos_ok = _same_seg((R(top[0].p1), R(top[0].p2)), ex6["top"], TOL) and _same_seg((R(low[0].p1), R(low[0].p2)), ex6["low"], TOL)
+    C.add(1, "1.6", "góc dốc = atan(h/b) (đo trên dầm cốn), chữ góc 1 chữ số thập phân; khoảng cách đứng hai mép dầm cốn = độ sâu dải vẽ (o = bd/cosθ; dầm sâu hơn bậc ≤ 10 mm vẽ khít = h); mép dưới đi qua chân bậc từ gốc (0, 0)",
           slope_ok and ang_ok and dist_ok and pos_ok,
-          f"góc {math.degrees(math.atan(h / b)):.4f}°, chữ {ang[0].s if ang else None!r}; khoảng cách mép dầm {ds['bd']:g} mm: {dist_ok}; mép trên hạ {shift:.3f} mm so với đường mũi bậc: {pos_ok}")
+          f"góc {math.degrees(math.atan(h / b)):.4f}°, chữ {ang[0].s if ang else None!r}; khoảng cách đứng hai mép {ex6['od']:.3f} mm (khai báo {ds['bd']:g} mm vuông góc, o = {ex6['o']:.3f}{', vẽ khít' if ex6['snug'] else ''}): {dist_ok}; vị trí hai mép: {pos_ok}")
     lv = by("level_line")
     zs = sorted(round(R(p.p1)[1], 6) for p in lv)
     lvt = sorted(p.s for p in by("level_text"))
@@ -127,7 +127,11 @@ def check_primitives_a(C: Checks, D, sp):
     check_dam_label(C, D, sp)
     check_stringer_covers_a(C, D, sp)
     check_steps_inside_a(C, D, sp)
-    check_stringer_foot_a(C, D, sp)
+    check_strip_closed_a(C, D, sp)
+    check_strip_origin_a(C, D, sp)
+    check_strip_below_floor_a(C, D, sp)
+    check_section_exact_a(C, D, sp)
+    check_strip_snug_a(C, D, sp)
     segs = [(g.p1, g.p2) for g in D.prims if isinstance(g, Line) and not g.sheet and not g.tag.startswith("dim_")]
     for r_ in (p for p in D.prims if isinstance(p, Rect) and not p.sheet):
         (ax_, ay_), (bx_, by_) = r_.p0, r_.p1
@@ -148,13 +152,81 @@ def check_primitives_a(C: Checks, D, sp):
         C.info(1, "1.11", "cảnh báo mềm 2h + b", f"2h + b = {sp['two_h_b']:.1f} mm, trong khoảng {sp['params']['nguong_2hb_min']:g}-{sp['params']['nguong_2hb_max']:g} mm (quy tắc kinh nghiệm, không phải điều khoản TCVN)")
 
 
-def _stringer_cover(top, low, n, b, h, tol):
+SNUG_MAX = 10.0          # a stringer deeper than one riser by at most this much (vertical, real mm; o = h included) is drawn "snug": exactly one riser high
+
+
+def _strip_expect(sp):
+    """The stringer strip from the spec formulas (real mm, section coordinates, independent of the builder): the lower edge always runs through the feet of the risers,
+    (0, 0) to (L, (n-1)h); the top edge is the drawn depth od above it. o = bd / cos(theta). o < h: od = o, top edge (0, o) to (L, (n-1)h + o). 0 <= o - h <= SNUG_MAX ("snug",
+    o = h included): od = h, the top edge is the nosing line (0, h) to (L, H), nothing else. o - h > SNUG_MAX: od = o, top edge (0, o) to (xt, H) cut flat at the upper floor level,
+    xt = (H - o) b / h, plus the cap (xt, H)-(L, H) and the left end (0, h)-(0, o) (in line with riser 1)."""
+    n, H, b = sp["so_bac"], sp["cao_tang"], sp["b"]
+    h, L = H / n, (n - 1) * b
+    o = sp["dam_con"]["bd"] * math.hypot(b, h) / b
+    snug = -1e-9 <= o - h <= SNUG_MAX + 1e-9
+    od = h if snug else o
+    low = ((0.0, 0.0), (L, (n - 1) * h))
+    extras = []
+    if od <= h + 1e-9:
+        top = ((0.0, od), (L, (n - 1) * h + od))
+    else:
+        xt = (H - o) * b / h
+        top = ((0.0, o), (xt, H))
+        if L - xt > 1e-9:
+            extras.append(((xt, H), (L, H)))
+        extras.append(((0.0, h), (0.0, o)))
+    return dict(o=o, od=od, snug=snug, top=top, low=low, extras=extras, deep=o > h + 1e-9)
+
+
+def _expected_section_lines(sp, stub_real):
+    """Every NET-CHINH line of the section (real mm): saw-tooth, the two floor stubs and the stringer strip."""
+    n, H, b = sp["so_bac"], sp["cao_tang"], sp["b"]
+    h, L = H / n, (n - 1) * b
+    ex = _strip_expect(sp)
+    out = [(((i - 1) * b, (i - 1) * h), ((i - 1) * b, i * h)) for i in range(1, n + 1)] + [(((i - 1) * b, i * h), (i * b, i * h)) for i in range(1, n)]
+    out += [((-stub_real, 0.0), (0.0, 0.0)), ((L, H), (L + stub_real, H)), ex["top"], ex["low"]] + ex["extras"]
+    return out
+
+
+def _in_section_region(g, sp, stub_real):
+    """True for a segment inside the section block (real mm): the plan block lies below it or to its right, outside this window."""
+    n, H, b = sp["so_bac"], sp["cao_tang"], sp["b"]
+    L = (n - 1) * b
+    return all(-stub_real - 1.0 <= q[0] <= L + stub_real + 1.0 and -1.0 <= q[1] <= 2.0 * H for q in g)
+
+
+def _match_all(exp, got, tol):
+    """One-to-one match of expected segments with drawn ones: (missing expected, extra drawn)."""
+    used, missing = set(), []
+    for e in exp:
+        for i, g in enumerate(got):
+            if i not in used and _same_seg(e, g, tol):
+                used.add(i)
+                break
+        else:
+            missing.append(tuple(round(v, 3) for q in e for v in q))
+    extra = [tuple(round(v, 3) for q in g for v in q) for i, g in enumerate(got) if i not in used]
+    return missing, extra
+
+
+def _cover_gap(segs, lo, hi):
+    """Length of [lo, hi] not covered by the intervals `segs` [(a, b)] (any order of a, b)."""
+    iv = sorted((max(lo, min(a, c)), min(hi, max(a, c))) for a, c in segs if max(a, c) > lo and min(a, c) < hi)
+    pos, gap = lo, 0.0
+    for a, c in iv:
+        if a > pos:
+            gap += a - pos
+        pos = max(pos, c)
+    return gap + max(0.0, hi - pos)
+
+
+def _stringer_cover(top, low, n, b, h, tol, Hcap=None):
     """Feet of the risers F_i = ((i-1)b, (i-1)h), i = 1..n (the inner corners of the saw-tooth) against the stringer strip given by its top and lower edge
-    ((x1, z1), (x2, z2)) in real mm. The strip covers a corner when low(x) <= z <= top(x); left of the start of the lower edge (cut at the floor) the lower edge is z = 0.
+    ((x1, z1), (x2, z2)) in real mm. The strip covers a corner when low(x) <= z <= top(x); the top boundary is capped at the upper floor level Hcap (the strip is cut flat there).
     Returns (worst amount in mm a corner sticks out below the lower edge or above the top edge, [(i, amount)])."""
     (xt1, zt1), (xt2, zt2) = top
     (xl1, zl1), (xl2, zl2) = low
-    zt = lambda x: zt1 + (zt2 - zt1) * (x - xt1) / (xt2 - xt1)
+    zt = lambda x: min(zt1 + (zt2 - zt1) * (x - xt1) / (xt2 - xt1), Hcap if Hcap is not None else 1e18)
     zl = lambda x: 0.0 if x < min(xl1, xl2) - 1e-9 else zl1 + (zl2 - zl1) * (x - xl1) / (xl2 - xl1)
     out = []
     for i in range(1, n + 1):
@@ -165,17 +237,17 @@ def _stringer_cover(top, low, n, b, h, tol):
     return (max((d for _, d in out), default=0.0)), out
 
 
-def _steps_inside(top, low, n, b, h, tol):
-    """Whole saw-tooth against the stringer strip (top / lower edge as ((x1, z1), (x2, z2)), real mm): the nosings N_i = (i b, (i+1) h), i = 0..n-1, must not stand above the top
-    edge and the feet F_i = ((i-1) b, (i-1) h), i = 1..n, must not hang below the lower edge (left of the start of a lower edge cut at the floor it is z = 0).
+def _steps_inside(top, low, n, b, h, tol, Hcap=None):
+    """Whole saw-tooth against the stringer strip (top / lower edge as ((x1, z1), (x2, z2)), real mm): the nosings N_i = (i b, (i+1) h), i = 0..n-1, must not stand above the top edge
+    (capped at the upper floor level Hcap) and the feet F_i = ((i-1) b, (i-1) h), i = 1..n, must not hang below the lower edge.
     Returns (worst nosing above the top edge, worst foot below the lower edge, [(kind, i, amount)]), amounts in mm."""
     (xt1, zt1), (xt2, zt2) = top
     (xl1, zl1), (xl2, zl2) = low
-    zt = lambda x: zt1 + (zt2 - zt1) * (x - xt1) / (xt2 - xt1)
+    zt = lambda x: min(zt1 + (zt2 - zt1) * (x - xt1) / (xt2 - xt1), Hcap if Hcap is not None else 1e18)
     zl = lambda x: 0.0 if x < min(xl1, xl2) - 1e-9 else zl1 + (zl2 - zl1) * (x - xl1) / (xl2 - xl1)
     bad, wn, wf = [], 0.0, 0.0
     for i in range(n):
-        d = (i + 1) * h - zt(i * b)                  # nosing above the top edge
+        d = (i + 1) * h - zt(i * b)                            # nosing above the top edge
         wn = max(wn, d)
         if d > tol:
             bad.append(("mũi", i, round(d, 3)))
@@ -185,6 +257,40 @@ def _steps_inside(top, low, n, b, h, tol):
         if d > tol:
             bad.append(("chân", i, round(d, 3)))
     return wn, wf, bad
+
+
+def _strip_closure(top, low, lines, n, b, h, H, tol=1e-6):
+    """Is the strip closed at both ends? top / low = the drawn edges ((x1, z1), (x2, z2)) left to right; lines = NET-CHINH segments of the section (real mm).
+    Left: the top edge starts on x = 0 and x = 0 is drawn from the floor up to its start (riser 1 + the end in line with it). Right: the lower edge ends at the foot of riser n,
+    the top edge ends on riser n (x = L) or on the upper floor level z = H, in which case z = H is drawn from its end to x = L (the cap); riser n closes the right end.
+    Returns a list of problems."""
+    L = (n - 1) * b
+    vert = lambda x: [(g[0][1], g[1][1]) for g in lines if abs(g[0][0] - x) <= tol and abs(g[1][0] - x) <= tol]
+    horz = lambda z: [(g[0][0], g[1][0]) for g in lines if abs(g[0][1] - z) <= tol and abs(g[1][1] - z) <= tol]
+    (xs, zs), (xe, ze) = top
+    (xl, zl0), (xr, zlr) = low
+    prob = []
+    if abs(xs) > tol:
+        prob.append(f"mép trên bắt đầu ở x = {xs:.3f} (cần 0)")
+    else:
+        g = _cover_gap(vert(0.0), 0.0, zs)
+        if g > tol:
+            prob.append(f"đầu dưới hở {g:.3f} mm (x = 0, từ z = 0 tới {zs:.3f})")
+    if abs(xr - L) > tol or abs(zlr - (n - 1) * h) > tol:
+        prob.append(f"mép dưới kết thúc ở ({xr:.3f}; {zlr:.3f}), cần chân bậc cuối ({L:g}; {(n - 1) * h:.3f})")
+    if abs(xe - L) <= tol:
+        g = _cover_gap(vert(L), zlr, ze)
+        if g > tol:
+            prob.append(f"đầu trên hở {g:.3f} mm (x = L, từ z = {zlr:.3f} tới {ze:.3f})")
+    elif abs(ze - H) <= tol:
+        g1, g2 = _cover_gap(horz(H), xe, L), _cover_gap(vert(L), zlr, H)
+        if g1 > tol:
+            prob.append(f"đầu trên hở {g1:.3f} mm (z = H, từ x = {xe:.3f} tới {L:g})")
+        if g2 > tol:
+            prob.append(f"đầu trên hở {g2:.3f} mm (x = L, từ z = {zlr:.3f} tới {H:g})")
+    else:
+        prob.append(f"mép trên kết thúc ở ({xe:.3f}; {ze:.3f}): không chạm bậc cuối (x = {L:g}) cũng không ở sàn tầng trên (z = {H:g})")
+    return prob
 
 
 def _shallow_info(sp):
@@ -199,9 +305,17 @@ def _shallow_info(sp):
                            f"cần >= {need:.1f} mm vuông góc (gợi ý H{bw:g}x{z:g}x{t:g})")
 
 
+def _section_lines_prims(D, sp):
+    s = D.view_scale("section")
+    ox, oy = D.meta["section_origin"]
+    R = lambda p: ((p[0] - ox) * s, (p[1] - oy) * s)
+    stub = sp["params"]["doan_san"] * s
+    return [(R(p.p1), R(p.p2)) for p in D.prims if isinstance(p, Line) and not p.sheet and p.layer == "NET-CHINH" and _in_section_region((R(p.p1), R(p.p2)), sp, stub)], stub
+
+
 def check_steps_inside_a(C: Checks, D, sp):
     """1.25: the whole saw-tooth lies inside the stringer strip (nosings not above the top edge, feet not below the lower edge) when the stringer is at least one riser deep;
-    a shallower stringer (o < h) is NOT an error: INFO with the soft warning (the strip is lowered by h - o so the feet are still covered, see 1.24)."""
+    a shallower stringer (o < h) is NOT an error: INFO with the soft warning (the strip is lowered so the feet are still covered, see 1.24)."""
     s = D.view_scale("section")
     ox, oy = D.meta["section_origin"]
     R = lambda p: ((p[0] - ox) * s, (p[1] - oy) * s)
@@ -213,7 +327,7 @@ def check_steps_inside_a(C: Checks, D, sp):
     if len(top) != 1 or len(low) != 1:
         C.add(1, "1.25", "bậc nằm trọn trong dải dầm cốn", False, "không có đúng một mép trên và một mép dưới dầm cốn")
         return
-    wn, wf, bad = _steps_inside(top=(R(top[0].p1), R(top[0].p2)), low=(R(low[0].p1), R(low[0].p2)), n=n, b=b, h=h, tol=TOL)
+    wn, wf, bad = _steps_inside(top=(R(top[0].p1), R(top[0].p2)), low=(R(low[0].p1), R(low[0].p2)), n=n, b=b, h=h, tol=TOL, Hcap=H)
     if deep:
         C.add(1, "1.25", "bậc nằm trọn trong dải dầm cốn: mọi mũi bậc không cao hơn mép trên dầm, mọi chân bậc không thấp hơn mép dưới dầm (dầm cao hơn một bậc)", not bad,
               f"{n} mũi + {n} chân bậc; mũi nhô trên mép trên tối đa {max(wn, 0.0):.6f} mm, chân nhô dưới mép dưới tối đa {max(wf, 0.0):.6f} mm; vi phạm: {bad[:3]}")
@@ -221,45 +335,119 @@ def check_steps_inside_a(C: Checks, D, sp):
         C.info(1, "1.25", "bậc nằm trọn trong dải dầm cốn (dầm quá nông: không phải lỗi, chỉ cảnh báo)", f"{msg}; đo: mũi nhô {wn:.3f} mm, chân nhô {max(wf, 0.0):.3f} mm")
 
 
-def _foot_gap(low, floor_segs, tol=1e-6):
-    """Closure of the strip at the foot. `low` = ((x1, z1), (x2, z2)) lower edge in real mm; `floor_segs` = horizontal NET-CHINH segments ((xa, za), (xb, zb)) on z = 0.
-    When the lower edge is cut at the floor (it starts on z = 0 at x0 > tol) the interval [0, x0] of the floor line must be drawn (the bottom of the strip, between the foot of
-    riser 1 and the start of the lower edge): returns (cut, uncovered length in mm). Not cut (the lower edge starts at the foot of riser 1): (False, 0)."""
-    p = min(low, key=lambda q: q[0])
-    x0 = p[0]
-    if abs(p[1]) > tol or x0 <= tol:
-        return False, 0.0
-    iv = sorted((max(0.0, min(a[0], b[0])), min(x0, max(a[0], b[0]))) for a, b in floor_segs if abs(a[1]) <= tol and abs(b[1]) <= tol and max(a[0], b[0]) > 0 and min(a[0], b[0]) < x0)
-    return True, _uncovered(iv, x0)
+def check_strip_closed_a(C: Checks, D, sp):
+    """1.26: the strip is closed at both ends with no gap (1e-6 mm): at the foot the top edge starts on x = 0 and x = 0 is drawn up to it (riser 1 and, when the stringer is deeper than
+    one riser, the short end in line with it); at the top the lower edge ends at the foot of riser n and the top edge ends on riser n or on the upper floor level with the cap to riser n."""
+    s = D.view_scale("section")
+    ox, oy = D.meta["section_origin"]
+    R = lambda p: ((p[0] - ox) * s, (p[1] - oy) * s)
+    n, H, b = sp["so_bac"], sp["cao_tang"], sp["b"]
+    h = H / n
+    top = [p for p in D.prims if p.tag == "stringer_top"]
+    low = [p for p in D.prims if p.tag == "stringer_low"]
+    if len(top) != 1 or len(low) != 1:
+        C.add(1, "1.26", "dải dầm khép kín ở hai đầu", False, "không có đúng một mép trên và một mép dưới dầm cốn")
+        return
+    orient = lambda a, c: (a, c) if a[0] <= c[0] else (c, a)
+    lines, _ = _section_lines_prims(D, sp)
+    prob = _strip_closure(orient(R(top[0].p1), R(top[0].p2)), orient(R(low[0].p1), R(low[0].p2)), lines, n, b, h, H)
+    C.add(1, "1.26", "dải dầm khép kín ở hai đầu (khe hở ≤ 1e-6 mm): đầu dưới mép trên bắt đầu trên x = 0 và x = 0 được vẽ liền tới đó; đầu trên mép dưới kết thúc ở chân bậc cuối, "
+          "mép trên kết thúc trên nét đứng bậc cuối hoặc cắt phẳng ở sàn tầng trên và nét nắp nối tới nét đứng bậc cuối", not prob, f"{len(lines)} nét NET-CHINH của mặt cắt; vấn đề: {prob[:3]}")
 
 
-def _uncovered(iv, x0):
-    pos, gap = 0.0, 0.0
-    for lo, hi in iv:
-        if lo > pos:
-            gap += lo - pos
-        pos = max(pos, hi)
-    return gap + max(0.0, x0 - pos)
-
-
-def check_stringer_foot_a(C: Checks, D, sp):
-    """1.26: when the lower edge of the stringer is cut at the floor, the strip is closed at the foot: the floor line from the foot of riser 1 (0, 0) to the start of the lower edge is drawn
-    (gap <= 1e-6 mm). A stringer that is not cut (o <= h) needs no bottom line."""
+def check_strip_origin_a(C: Checks, D, sp):
+    """1.27: the lower edge of the stringer starts at the origin (0, 0) (within 0.1 mm real)."""
     s = D.view_scale("section")
     ox, oy = D.meta["section_origin"]
     R = lambda p: ((p[0] - ox) * s, (p[1] - oy) * s)
     low = [p for p in D.prims if p.tag == "stringer_low"]
-    floor = [(R(p.p1), R(p.p2)) for p in D.prims if isinstance(p, Line) and not p.sheet and p.layer == "NET-CHINH" and abs(R(p.p1)[1]) < 1e-6 and abs(R(p.p2)[1]) < 1e-6]
-    if len(low) != 1:
-        C.add(1, "1.26", "dải dầm khép kín ở chân", False, "không có đúng một mép dưới dầm cốn")
-        return
-    cut, gap = _foot_gap((R(low[0].p1), R(low[0].p2)), floor)
-    C.add(1, "1.26", "dải dầm khép kín ở chân: khi mép dưới dầm bị cắt tại sàn z = 0, nét đáy nối chân nét đứng bậc 1 với đầu mép dưới (khe hở ≤ 1e-6 mm); dầm không bị cắt thì không cần nét đáy", gap <= 1e-6,
-          f"mép dưới {'bị cắt tại sàn, đầu mép dưới ở x = %.3f mm' % min(R(low[0].p1)[0], R(low[0].p2)[0]) if cut else 'bắt đầu đúng chân bậc 1 (không cắt tại sàn)'}; khe hở {gap:.6f} mm")
+    ok, d = False, "không có đúng một mép dưới dầm cốn"
+    if len(low) == 1:
+        a, c = R(low[0].p1), R(low[0].p2)
+        left = a if a[0] <= c[0] else c
+        dist = math.hypot(left[0], left[1])
+        ok = dist <= 0.1
+        d = f"đầu dưới của mép dưới dầm ở ({left[0]:.4f}; {left[1]:.4f}) mm thật, cách gốc {dist:.4f} mm (≤ 0,1)"
+    C.add(1, "1.27", "đầu dưới của mép dưới dầm cốn trùng gốc (0, 0) (sai số ≤ 0,1 mm thật)", ok, d)
+
+
+def check_strip_below_floor_a(C: Checks, D, sp):
+    """1.28: no stringer line rises above the upper floor level z = H (the strip is cut flat there)."""
+    s = D.view_scale("section")
+    ox, oy = D.meta["section_origin"]
+    R = lambda p: ((p[0] - ox) * s, (p[1] - oy) * s)
+    H = sp["cao_tang"]
+    sl = [p for p in D.prims if p.tag.startswith("stringer_") and isinstance(p, Line)]
+    zmax = max((max(R(p.p1)[1], R(p.p2)[1]) for p in sl), default=float("nan"))
+    C.add(1, "1.28", "dải dầm cốn không vượt quá cao độ sàn tầng trên z = cao_tang (cắt phẳng tại sàn)", bool(sl) and zmax <= H + 1e-6, f"{len(sl)} nét dầm cốn; cao nhất z = {zmax:.6f} mm (sàn trên {H:g})")
+
+
+def check_section_exact_a(C: Checks, D, sp):
+    """1.29: the NET-CHINH lines of the section are exactly the saw-tooth, the two floor stubs and the stringer strip (top and lower edge, cap, end): none missing, none extra."""
+    lines, stub = _section_lines_prims(D, sp)
+    exp = _expected_section_lines(sp, stub)
+    missing, extra = _match_all(exp, lines, TOL)
+    C.add(1, "1.29", "nét NET-CHINH của mặt cắt đúng bằng: răng cưa, 2 đoạn sàn, dải dầm cốn (mép trên, mép dưới, nét nắp / đầu nếu cần): không thiếu, không thừa nét nào", not missing and not extra,
+          f"{len(lines)} nét vẽ / {len(exp)} nét cần; thiếu {missing[:2]}; thừa {extra[:2]}")
+
+
+def _snug_problems(top, low, n, b, h, H, tol):
+    """"Snug" strip (real mm, edges left to right): every nosing (i b, (i+1) h) lies ON the top edge and every foot ((i-1) b, (i-1) h) ON the lower edge (within tol), the top edge starts at
+    (0, h) and ends at (L, H) (the corner of the upper floor), the lower edge runs from (0, 0) to (L, (n-1) h). Returns (worst deviation, [problems])."""
+    L = (n - 1) * b
+    (xt1, zt1), (xt2, zt2) = top
+    (xl1, zl1), (xl2, zl2) = low
+    zt = lambda x: zt1 + (zt2 - zt1) * (x - xt1) / (xt2 - xt1)
+    zl = lambda x: zl1 + (zl2 - zl1) * (x - xl1) / (xl2 - xl1)
+    prob, worst = [], 0.0
+    for i in range(n):
+        d = abs((i + 1) * h - zt(i * b))
+        worst = max(worst, d)
+        if d > tol:
+            prob.append(f"mũi {i + 1} cách mép trên {d:.3f} mm")
+    for i in range(1, n + 1):
+        d = abs((i - 1) * h - zl((i - 1) * b))
+        worst = max(worst, d)
+        if d > tol:
+            prob.append(f"chân {i} cách mép dưới {d:.3f} mm")
+    for nm, got, want in (("đầu trái mép trên", (xt1, zt1), (0.0, h)), ("đầu phải mép trên (góc sàn tầng trên)", (xt2, zt2), (L, H)),
+                          ("đầu trái mép dưới", (xl1, zl1), (0.0, 0.0)), ("đầu phải mép dưới", (xl2, zl2), (L, (n - 1) * h))):
+        d = math.hypot(got[0] - want[0], got[1] - want[1])
+        worst = max(worst, d)
+        if d > tol:
+            prob.append(f"{nm} ở ({got[0]:.3f}; {got[1]:.3f}), cần ({want[0]:.3f}; {want[1]:.3f})")
+    return worst, prob
+
+
+def check_strip_snug_a(C: Checks, D, sp):
+    """1.32: when the declared stringer is deeper than one riser by at most 10 mm (o = h included) the strip is drawn snug: nosings exactly on the top edge, feet exactly on the lower edge
+    (0.01 mm real), top edge from the top of riser 1 to the corner (L, H) of the upper floor, no cap and no end line. Otherwise not applicable (INFO). 1.33 (INFO): the note shown to the user."""
+    ex = _strip_expect(sp)
+    n, H, b = sp["so_bac"], sp["cao_tang"], sp["b"]
+    h = H / n
+    o = ex["o"]
+    if ex["snug"]:
+        s = D.view_scale("section")
+        ox, oy = D.meta["section_origin"]
+        R = lambda p: ((p[0] - ox) * s, (p[1] - oy) * s)
+        top = [p for p in D.prims if p.tag == "stringer_top"]
+        low = [p for p in D.prims if p.tag == "stringer_low"]
+        extra = [p.tag for p in D.prims if p.tag in ("stringer_cap", "stringer_end", "stringer_foot")]
+        ok, d = False, "không có đúng một mép trên và một mép dưới dầm cốn"
+        if len(top) == 1 and len(low) == 1:
+            orient = lambda a, c: (a, c) if a[0] <= c[0] else (c, a)
+            worst, prob = _snug_problems(orient(R(top[0].p1), R(top[0].p2)), orient(R(low[0].p1), R(low[0].p2)), n, b, h, H, 0.01)
+            ok = not prob and not extra
+            d = f"{n} mũi + {n} chân bậc, lệch lớn nhất {worst:.4f} mm thật (≤ 0,01); nét thừa (nắp / nét đứng ngắn / nét đáy): {extra}; vấn đề: {prob[:3]}"
+        C.add(1, "1.32", "dải dầm vẽ khít bậc (dầm sâu hơn một bậc ≤ 10 mm): mũi bậc nằm đúng trên mép trên, chân bậc đúng trên mép dưới (0,01 mm), mép trên chạm góc sàn tầng trên (L, tổng cao), không có nét nắp / nét đứng ngắn", ok, d)
+    else:
+        C.info(1, "1.32", "dải dầm vẽ khít bậc", f"không áp dụng: o = {o:.2f} mm, h = {h:.2f} mm (o − h = {o - h:.2f} mm; chỉ vẽ khít khi 0 ≤ o − h ≤ {SNUG_MAX:g} mm)")
+    if sp.get("ghi_chu"):
+        C.info(1, "1.33", "ghi chú dải dầm vẽ khít bậc", " | ".join(sp["ghi_chu"]))
 
 
 def check_stringer_covers_a(C: Checks, D, sp):
-    """1.24: the stringer strip (top and lower edge of the primitives) covers every inner corner (foot of each riser) of the saw-tooth: no corner sticks out below the lower edge."""
+    """1.24: the stringer strip (top and lower edge of the primitives) covers every inner corner (foot of each riser): no corner sticks out below the lower edge."""
     s = D.view_scale("section")
     ox, oy = D.meta["section_origin"]
     R = lambda p: ((p[0] - ox) * s, (p[1] - oy) * s)
@@ -269,13 +457,13 @@ def check_stringer_covers_a(C: Checks, D, sp):
     low = [p for p in D.prims if p.tag == "stringer_low"]
     ok, detail = False, "không có đúng một mép trên và một mép dưới dầm cốn"
     if len(top) == 1 and len(low) == 1:
-        worst, bad = _stringer_cover((R(top[0].p1), R(top[0].p2)), (R(low[0].p1), R(low[0].p2)), n, b, h, TOL)
+        worst, bad = _stringer_cover((R(top[0].p1), R(top[0].p2)), (R(low[0].p1), R(low[0].p2)), n, b, h, TOL, Hcap=H)
         ok = not bad
         detail = f"{n} chân bậc; lòi ra khỏi dầm lớn nhất {worst:.3f} mm; chân lòi ra: {bad[:3]}"
     C.add(1, "1.24", "dầm cốn che hết góc trong (chân bậc) của răng cưa: mọi chân bậc ((i−1)b, (i−1)h) nằm trong dải giữa mép dưới và mép trên dầm", ok, detail)
 
 
-SECTION_TAGS = {"floor_lower", "floor_upper", "riser", "tread", "stringer_top", "stringer_low", "stringer_end", "stringer_foot", "level_line", "level_tri", "level_bar", "level_text",
+SECTION_TAGS = {"floor_lower", "floor_upper", "riser", "tread", "stringer_top", "stringer_low", "stringer_end", "stringer_cap", "level_line", "level_tri", "level_bar", "level_text",
                 "angle_text", "title_section", "note", "dam_label", "dam_leader"}
 
 
@@ -534,41 +722,65 @@ def check_dxf_a(C: Checks, D, sp, dx):
     st = ents.get("NET-CHINH", [])
     stray = [lay for lay in ("KEO", "COT") if ents.get(lay)]          # the stair has no rafters / columns: nothing may be on those layers
     cos_t = math.cos(math.atan(h / b))
-    shift = max(0.0, h - ds["bd"] / cos_t)           # a stringer shallower than one riser is lowered by h - o (o = bd / cos theta): its lower edge runs through the riser feet
-    top_ok = any(_same_seg(g, ((0.0, h - shift), (L, H - shift)), TOL_DXF) for g in st)
-    low_ok = any(abs(g[1][0] - L) < TOL_DXF and abs(g[1][0] - g[0][0]) > 1e-9 and close((H - shift - g[1][1]) * cos_t, ds["bd"], TOL_DXF)
-                 and close((g[1][1] - g[0][1]) / (g[1][0] - g[0][0]), h / b, 1e-9) for g in st)
+    ex = _strip_expect(sp)                           # from the spec formulas: lower edge through the riser feet, top edge o = bd / cos(theta) above it (cut flat at the floor when o > h)
+    stub_r = sp["params"]["doan_san"] * D.scale
+    top_ok = any(_same_seg(g, ex["top"], TOL_DXF) for g in st)
+    low_ok = any(_same_seg(g, ex["low"], TOL_DXF) for g in st)
     C.add(2, "2.7", "DXF (mm thật, gốc ở mép sàn dưới): răng cưa đúng công thức, đường cao độ z = 0 và z = cao_tang, dầm cốn đúng độ dốc và chiều cao",
           n_ok == len(exp) and lv_ok and top_ok and low_ok and not stray,
           f"{n_ok}/{len(exp)} đoạn răng cưa; cao độ {lv_ok}; mép trên dầm {top_ok}; mép dưới dầm {low_ok} (dầm cốn trên layer NET-CHINH, không có gì trên layer KEO/COT: {not stray}); thiếu {miss[:2]}")
+    region = [g for g in st if _in_section_region(g, sp, stub_r)]
     # 2.15: independent of the spec's stringer formula: the two sloped NET-CHINH edges must cover every foot of a riser (real mm)
-    slope = [g for g in st if abs(g[1][0] - g[0][0]) > 1.0 and close((g[1][1] - g[0][1]) / (g[1][0] - g[0][0]), h / b, 1e-9)]
+    slope = [g for g in region if abs(g[1][0] - g[0][0]) > 1.0 and close((g[1][1] - g[0][1]) / (g[1][0] - g[0][0]), h / b, 1e-4)]       # the strip edges are the only sloped NET-CHINH lines of the section
     ok15, d15 = False, f"{len(slope)} đoạn dầm cốn nghiêng trên NET-CHINH (cần 2)"
+    ends = None
     if len(slope) == 2:
         ends = sorted(((g[0], g[1]) if g[0][0] <= g[1][0] else (g[1], g[0]) for g in slope), key=lambda g: -g[1][1])     # higher edge first (compared at the upper end)
-        worst, bad = _stringer_cover(ends[0], ends[1], n, b, h, 1e-6)
+        worst, bad = _stringer_cover(ends[0], ends[1], n, b, h, 1e-6, Hcap=H)
         ok15 = not bad
         d15 = f"{n} chân bậc; lòi ra khỏi dầm lớn nhất {worst:.3f} mm; chân lòi ra: {bad[:3]}"
     C.add(2, "2.15", "DXF (mm thật): hai mép dầm cốn che hết mọi chân bậc ((i−1)b, (i−1)h): không chân nào lòi ra dưới mép dưới hoặc trên mép trên", ok15, d15)
-    # 2.17: strip closed at the foot (real mm): when the lower edge is cut at the floor, the floor line from (0, 0) to the start of the lower edge is drawn
-    if len(slope) == 2:
-        floor17 = [g for g in st if abs(g[0][1]) <= 1e-6 and abs(g[1][1]) <= 1e-6]
-        cut17, gap17 = _foot_gap(ends[1], floor17)
-        C.add(2, "2.17", "DXF (mm thật): dải dầm khép kín ở chân: khi mép dưới bị cắt tại sàn z = 0, nét đáy NET-CHINH nối (0, 0) với đầu mép dưới (khe hở ≤ 1e-6 mm)", gap17 <= 1e-6,
-              f"mép dưới {'bị cắt tại sàn ở x = %.3f mm' % min(ends[1][0][0], ends[1][1][0]) if cut17 else 'bắt đầu đúng chân bậc 1'}; khe hở {gap17:.6f} mm")
-    else:
-        C.add(2, "2.17", "DXF (mm thật): dải dầm khép kín ở chân", False, f"{len(slope)} đoạn dầm cốn nghiêng trên NET-CHINH (cần 2)")
+    bad_two = f"{len(slope)} đoạn dầm cốn nghiêng trên NET-CHINH (cần 2)"
     # 2.16: the whole saw-tooth (nosings and feet) inside the strip, real mm; a stringer shallower than one riser only gives INFO (see 1.25)
     deep16, msg16 = _shallow_info(sp)
-    if len(slope) == 2:
-        wn16, wf16, bad16 = _steps_inside(ends[0], ends[1], n, b, h, 1e-6)
+    if ends:
+        wn16, wf16, bad16 = _steps_inside(ends[0], ends[1], n, b, h, 1e-6, Hcap=H)
         if deep16:
             C.add(2, "2.16", "DXF (mm thật): bậc nằm trọn trong dải dầm (mọi mũi bậc không cao hơn mép trên, mọi chân bậc không thấp hơn mép dưới; dầm cao hơn một bậc)", not bad16,
                   f"{n} mũi + {n} chân bậc; mũi nhô trên mép trên tối đa {max(wn16, 0.0):.6f} mm, chân nhô dưới mép dưới tối đa {max(wf16, 0.0):.6f} mm; vi phạm: {bad16[:3]}")
         else:
             C.info(2, "2.16", "DXF (mm thật): bậc nằm trọn trong dải dầm (dầm quá nông: chỉ cảnh báo)", f"{msg16}; đo: mũi nhô {wn16:.3f} mm, chân nhô {max(wf16, 0.0):.3f} mm")
     else:
-        C.add(2, "2.16", "DXF (mm thật): bậc nằm trọn trong dải dầm", False, f"{len(slope)} đoạn dầm cốn nghiêng trên NET-CHINH (cần 2)")
+        C.add(2, "2.16", "DXF (mm thật): bậc nằm trọn trong dải dầm", False, bad_two)
+    # 2.17: strip closed at both ends (real mm), no gap
+    if ends:
+        prob17 = _strip_closure(ends[0], ends[1], region, n, b, h, H)
+        C.add(2, "2.17", "DXF (mm thật): dải dầm khép kín ở hai đầu (khe hở ≤ 1e-6 mm): mép trên bắt đầu trên x = 0 và x = 0 được vẽ liền tới đó; mép dưới kết thúc ở chân bậc cuối, mép trên kết thúc trên nét đứng bậc cuối hoặc "
+              "cắt phẳng ở sàn tầng trên với nét nắp nối tới nét đứng bậc cuối", not prob17, f"vấn đề: {prob17[:3]}")
+    else:
+        C.add(2, "2.17", "DXF (mm thật): dải dầm khép kín ở hai đầu", False, bad_two)
+    # 2.18: lower edge starts at the origin; 2.19: nothing above the upper floor level; 2.20: the NET-CHINH lines of the section are exactly the expected ones
+    if ends:
+        left = ends[1][0]
+        dist18 = math.hypot(left[0], left[1])
+        C.add(2, "2.18", "DXF (mm thật): đầu dưới của mép dưới dầm cốn trùng gốc (0, 0) (sai số ≤ 0,1 mm thật)", dist18 <= 0.1, f"đầu dưới ở ({left[0]:.4f}; {left[1]:.4f}), cách gốc {dist18:.4f} mm")
+    else:
+        C.add(2, "2.18", "DXF (mm thật): đầu dưới của mép dưới dầm cốn trùng gốc (0, 0)", False, bad_two)
+    # 2.21: snug strip (declared stringer deeper than one riser by at most 10 mm): nosings and feet exactly on the edges, top edge from (0, h) to the corner (L, H), nothing else (real mm, 0.01 mm)
+    if ex["snug"]:
+        if ends:
+            worst21, prob21 = _snug_problems(ends[0], ends[1], n, b, h, H, 0.01)
+            C.add(2, "2.21", "DXF (mm thật): dải dầm vẽ khít bậc (dầm sâu hơn một bậc ≤ 10 mm): mũi bậc đúng trên mép trên, chân bậc đúng trên mép dưới (0,01 mm), mép trên chạm góc sàn tầng trên (L, tổng cao)",
+                  not prob21, f"{n} mũi + {n} chân bậc, lệch lớn nhất {worst21:.4f} mm thật; vấn đề: {prob21[:3]}")
+        else:
+            C.add(2, "2.21", "DXF (mm thật): dải dầm vẽ khít bậc", False, bad_two)
+    else:
+        C.info(2, "2.21", "DXF (mm thật): dải dầm vẽ khít bậc", f"không áp dụng: o − h = {ex['o'] - h:.2f} mm (chỉ vẽ khít khi 0 ≤ o − h ≤ {SNUG_MAX:g} mm)")
+    zmax19 = max((max(g[0][1], g[1][1]) for g in region), default=float("nan"))
+    C.add(2, "2.19", "DXF (mm thật): dải dầm cốn không vượt quá cao độ sàn tầng trên z = cao_tang (cắt phẳng tại sàn)", bool(region) and zmax19 <= H + 1e-6, f"nét NET-CHINH của mặt cắt cao nhất z = {zmax19:.6f} mm (sàn trên {H:g})")
+    missing20, extra20 = _match_all(_expected_section_lines(sp, stub_r), region, TOL_DXF)
+    C.add(2, "2.20", "DXF (mm thật): nét NET-CHINH của mặt cắt đúng bằng: răng cưa, 2 đoạn sàn, dải dầm cốn (nét nắp / đầu nếu cần): không thiếu, không thừa nét nào", not missing20 and not extra20,
+          f"{len(region)} nét vẽ; thiếu {missing20[:2]}; thừa {extra20[:2]}")
     polys = [e for e in dx["ents"] if e["type"] == "LWPOLYLINE" and e["layer"] == "NET-CHINH"]
     plan = []
     for e in polys:
