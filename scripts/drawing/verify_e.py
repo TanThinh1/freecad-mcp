@@ -2,12 +2,13 @@
 the wall bodies and their outline (edge splitting + point sampling, not the builder's coordinate compression), measured dimension values from the references, areas by the shoelace
 formula, label strings; fixed paper sizes (bubbles, ticks, offsets) are multiplied by the scale. The expected geometry (real mm) is compared in BOTH directions with the drawn primitives
 (1.50-1.54), with the LINE / LWPOLYLINE / CIRCLE entities of the DXF (2.30-2.32), of the DXF read back from the DWG (3.20) and with the strokes of the PDF (5.20). Text rules are
-measured with the real Arial widths (as check 1.45 of type D): no text box crosses a drawn line (0.3 mm), no two text boxes overlap. New ids only: 1.50-1.62, 2.30-2.35, 3.20-3.24, 5.20.
+measured with the real Arial widths (as check 1.45 of type D): no text box crosses a drawn line (0.3 mm), no two text boxes overlap. New ids only: 1.50-1.69 (phase 2: 1.63-1.69), 2.30-2.36, 3.20-3.25, 5.20.
 """
 from __future__ import annotations
 
 import collections
 import math
+import re
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from fractions import Fraction
 
@@ -16,6 +17,7 @@ from readers import f
 from tcvn import ARIAL_CAP, SHEETS
 from verify import Checks, check_expressions, close, _seg_rect_gap
 from verify_d import _box, _real_width, dxf_text_boxes
+import verify_e2
 
 TOL = 1e-6              # real mm, floating point
 TOL_DXF = 1e-3
@@ -26,7 +28,8 @@ SCALE_LIMIT = 200
 AUTO = (20, 50, 100, 200, 500)
 FURN = {"giuong": (1600, 2000, "GIƯỜNG"), "ban": (1200, 600, "BÀN"), "ghe": (450, 450, "GHẾ"), "tu": (1200, 600, "TỦ"), "bep": (2000, 600, "BẾP"),
         "bon_rua": (800, 500, "BỒN RỬA"), "bon_cau": (400, 700, "BỒN CẦU"), "lavabo": (500, 400, "LAVABO")}
-FAMILY_OF_TAG = (("axis_", "1.50"), ("bubble", "1.50"), ("wall_", "1.51"), ("door_", "1.52"), ("win_", "1.52"), ("furn:", "1.53"), ("raw_", "1.53"), ("bac_", "1.53"), ("dim:", "1.54"))
+FAMILY_OF_TAG = (("hatch:", "1.63"), ("lop:", "1.64"), ("kc:", "1.64"), ("mong:", "1.64"), ("cot:", "1.64"), ("cd:", "1.65"), ("mai:", "1.65"), ("lc:", "1.65"), ("bt:", "1.65"),
+                 ("lv:", "1.66"), ("cut", "1.66"), ("gio_", "1.66"), ("leader:", "1.66"), ("axis_", "1.50"), ("bubble", "1.50"), ("wall_", "1.51"), ("door_", "1.52"), ("win_", "1.52"), ("furn:", "1.53"), ("raw_", "1.53"), ("bac_", "1.53"), ("dim:", "1.54"))
 
 
 def F(x):
@@ -147,9 +150,11 @@ def ref_value(view, ref):
         box = (min(xs), min(ys), max(xs), max(ys))
     elif e["t"] == "noi_that_co_ban":
         box = furn_box(e)
-    else:
+    elif e["t"] in ("tron", "cung"):
         c, r = e["tam"], e["ban_kinh"]
         box = (c[0] - r, c[1] - r, c[0] + r, c[1] + r)
+    else:
+        box = e["box"]                      # rectangle-like phase 2 elements: bounding box measured from their own spec numbers
     return {"tay": box[0], "dong": box[2], "nam": box[1], "bac": box[3]}[anchor]
 
 
@@ -275,6 +280,7 @@ def expected(sp, s):
             tx.extend(("CHU", ln) for ln in e["dong"])
         elif e["t"] == "chu":
             tx.append(("CHU", e["chu"]))
+    verify_e2.add_expected(view, s, P, sh, tx)
     # ---- extent of the geometry (what the dimensions are offset from)
     xs, ys = [], []
     for fam, layer, kind, d in sh:
@@ -429,8 +435,9 @@ def family_id(tag):
     return None
 
 
-EXP_FAMILY = {"truc": "1.50", "tuong": "1.51", "cua": "1.52", "noi_that": "1.53", "tho": "1.53", "bac": "1.53", "kich_thuoc": "1.54"}
-NAMES = {"1.50": "lưới trục + vòng ký hiệu (vị trí, độ dài trục, tâm vòng)", "1.51": "đường bao tường = biên của hợp các thân tường (cắt bởi cửa), chiều hai chiều", "1.52": "ký hiệu cửa đi (khung, cánh, cung mở) và cửa sổ đúng vị trí, nằm trọn trong tường",
+EXP_FAMILY = {"hatch": "1.63", "kc": "1.64", "dung": "1.65", "dau": "1.66", "truc": "1.50", "tuong": "1.51", "cua": "1.52", "noi_that": "1.53", "tho": "1.53", "bac": "1.53", "kich_thuoc": "1.54"}
+NAMES = {"1.63": "hatch vật liệu: đúng mẫu (góc, khoảng cách, mốc theo gốc toạ độ) và đúng đoạn cắt theo hình chữ nhật của lớp (hai chiều)", "1.64": "lớp vật liệu / sàn / dầm / cột / móng / cột chi tiết: hình chữ nhật, thép đai và tròn thép đúng vị trí, kích thước",
+         "1.65": "cửa đứng, mái (bằng, 1 mái, 2 mái, độ dốc, bề dày), lan can, bậc thang đúng toạ độ", "1.66": "cao độ, đường dẫn ghi chú, dấu cắt, tuyến gió đúng vị trí và đúng số lượng nét", "1.50": "lưới trục + vòng ký hiệu (vị trí, độ dài trục, tâm vòng)", "1.51": "đường bao tường = biên của hợp các thân tường (cắt bởi cửa), chiều hai chiều", "1.52": "ký hiệu cửa đi (khung, cánh, cung mở) và cửa sổ đúng vị trí, nằm trọn trong tường",
          "1.53": "nội thất, phần tử thô (đường, polyline, cung, tròn) và mũi tên bắc", "1.54": "kích thước đo từ tham chiếu (đường, gióng, mũi tên đúng toạ độ và đúng giá trị)"}
 
 
@@ -484,8 +491,10 @@ def overlap_findings(boxes, margin=0.0):
 
 
 def own_dim(ttag, otag):
-    """a dimension text may touch the lines / ticks of its own dimension (they are adjacent by construction)."""
-    return ttag.startswith("dim:") and otag.startswith("dim:") and ttag.split(":")[1] == otag.split(":")[1]
+    """a dimension / level / leader / section-marker text may touch the lines of its OWN element (adjacent by construction)."""
+    tp, op = ttag.split(":"), otag.split(":")
+    pairs = {"dim": "dim", "leader_text": "leader", "cut_text": "cut_arm", "lv_text": "lv"}
+    return tp[0] in pairs and op[0] == pairs[tp[0]] and len(tp) > 1 and len(op) > 1 and tp[1] == op[1]
 
 
 # ------------------------------------------------------------------ 1. primitives
@@ -504,9 +513,10 @@ def check_primitives_e(C: Checks, D, sp):
     for fam, layer, kind in miss:
         by_fam[EXP_FAMILY[fam]].append(f"{fam}/{layer}/{kind}")
     counts = collections.Counter(EXP_FAMILY[x[0]] for x in X["shapes"])
-    for cid in ("1.50", "1.51", "1.52", "1.53", "1.54"):
+    for cid in ("1.50", "1.51", "1.52", "1.53", "1.54", "1.63", "1.64", "1.65", "1.66"):
         C.add(1, cid, NAMES[cid], not by_fam[cid] and not extras[cid] and not extras["?"],
               f"{counts[cid]} nét/hình mong đợi; thiếu {len(by_fam[cid])} {by_fam[cid][:2]}; thừa {len(extras[cid])} {extras[cid][:3]}" + (f"; thừa không rõ nguồn {extras['?'][:3]}" if extras["?"] and cid == "1.50" else ""))
+    verify_e2.check_phase2(C, D, sp)
     # ---- texts: strings
     want = collections.Counter(X["texts"])
     drawn = [t for t in D.prims if isinstance(t, Text) and not t.sheet]
@@ -556,6 +566,7 @@ def check_primitives_e(C: Checks, D, sp):
         if e["t"] == "tuong" and not (100 <= e["day"] <= 500):
             w_exp.append(e["id"])
     got_w = D.info.get("warnings", [])
+    w_exp += verify_e2.soft_warning_ids(view)
     ok_w = len(got_w) == len(w_exp) and all(any(f"{i!r}" in w or f"id={i!r}" in w for w in got_w) for i in w_exp) and all("KHÔNG phải điều khoản TCVN" in w for w in got_w)
     C.add(1, "1.61", "cảnh báo mềm (cửa đi hẹp hơn 700 mm, tường dày ngoài 100-500 mm: kinh nghiệm thực tế, không phải điều khoản TCVN): đúng phần tử, không thừa không thiếu", ok_w, f"cần {w_exp}; có {len(got_w)} cảnh báo")
     check_expressions(C, [t.s for t in drawn], 1, "1.62", "chữ trên bản vẽ")
@@ -640,8 +651,11 @@ def dxf_checks(C, D, sp, dx, group, ids, where):
     walls_m = [m for m in miss if m[1] == "NET-CHINH"]
     walls_x = [x for x in extra if x.startswith("NET-CHINH")]
     C.add(group, ids[0], f"{where}: đường bao tường (lớp NET-CHINH) khớp hai chiều với đường bao tính từ spec (mm thật, ±0,001)", not walls_m and not walls_x, f"thiếu {len(walls_m)}; thừa {len(walls_x)} {walls_x[:2]}")
-    rest_m = [m for m in miss if m[1] != "NET-CHINH"]
-    rest_x = [x for x in extra if not x.startswith("NET-CHINH")]
+    hat_m = [m for m in miss if m[1] == "MAT-CAT"]
+    hat_x = [x for x in extra if x.startswith("MAT-CAT")]
+    C.add(group, ids[4], f"{where}: hatch vật liệu (lớp MAT-CAT) khớp hai chiều với hatch tính từ spec (mẫu, khoảng cách, đoạn cắt theo hình chữ nhật)", not hat_m and not hat_x, f"thiếu {len(hat_m)}; thừa {len(hat_x)}")
+    rest_m = [m for m in miss if m[1] not in ("NET-CHINH", "MAT-CAT")]
+    rest_x = [x for x in extra if not x.startswith(("NET-CHINH", "MAT-CAT"))]
     C.add(group, ids[1], f"{where}: trục, ký hiệu cửa, nội thất, phần tử thô, mũi tên bắc và kích thước (đo từ tham chiếu) khớp hai chiều với spec, nét + tròn + hình chữ nhật", not rest_m and not rest_x,
           f"thiếu {len(rest_m)} {[m[0] + '/' + m[1] for m in rest_m[:3]]}; thừa {len(rest_x)} {rest_x[:3]}")
     texts = collections.Counter((lay, t) for lay, t in dx["texts"] if lay in ("CHU", "TRUC-KYHIEU", "KICH-THUOC"))
@@ -707,7 +721,9 @@ def dxf_text_rules(C, D, dx, group, cid, where):
                 dmin = math.hypot(dx_, dy_)
                 g = 0.0 if dmin <= r <= dmax else (dmin - r if dmin > r else r - dmax)
             if layer == "KICH-THUOC" and txt and (txt.isdigit() or txt[:1] in ("R", "Ø") or txt.endswith("°")):
-                continue           # dimension labels may touch the lines of their own dimension; their crossing of the OTHER lines is covered by 1.56 (primitives carry the tags)
+                continue
+            if layer == "NET-MANH" and re.fullmatch(r"[+\-±]\d+\.\d{3}", txt or ""):
+                continue                    # a level text sits on the bar of its own symbol           # dimension labels may touch the lines of their own dimension; their crossing of the OTHER lines is covered by 1.56 (primitives carry the tags)
             best = min(best, g)
             if g < TEXT_MARGIN * s:
                 bad.append((txt, layer))
@@ -720,7 +736,7 @@ def dxf_text_boxes_named(dx):
 
 
 def check_dxf_e(C: Checks, D, sp, dx):
-    dxf_checks(C, D, sp, dx, 2, ("2.30", "2.31", "2.32", "2.35"), "DXF")
+    dxf_checks(C, D, sp, dx, 2, ("2.30", "2.31", "2.32", "2.35", "2.36"), "DXF")
     dxf_text_rules(C, D, dx, 2, "2.33", "DXF")
     s = D.scale
     nz = [e for e in dx["ents"] if e["type"] == "LINE" and math.hypot(f(e["rec"], 11) - f(e["rec"], 10), f(e["rec"], 21) - f(e["rec"], 20)) < 1e-9]
@@ -730,7 +746,7 @@ def check_dxf_e(C: Checks, D, sp, dx):
 
 
 def check_dwg_e(C: Checks, D, sp, bx):
-    dxf_checks(C, D, sp, bx, 3, ("3.20", "3.21", "3.22", "3.24"), "DWG (đọc lại sau khứ hồi)")
+    dxf_checks(C, D, sp, bx, 3, ("3.20", "3.21", "3.22", "3.24", "3.25"), "DWG (đọc lại sau khứ hồi)")
     dxf_text_rules(C, D, bx, 3, "3.23", "DWG (đọc lại sau khứ hồi)")
 
 

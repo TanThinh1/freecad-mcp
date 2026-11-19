@@ -68,13 +68,43 @@ PHAN_TU = [
     dict(loai="chu", nhom="phần tử thô", mo_ta="Một dòng chữ tại một điểm (lớp CHU).", tham_so=[_p("chu", "chuỗi một dòng"), _p("vi_tri", "điểm neo " + PT), _p("cao", "2.5 | 3.5 | 5 mm giấy", False, 2.5), _p("can", "trai | giua | phai", False, "trai"), _p("dam", "đậm", False, False)],
          vi_du={"loai": "chu", "chu": "BẾP", "vi_tri": [1000, 1000]}),
 ]
+
+PHAN_TU += [
+    dict(loai="lop_vat_lieu", nhom="mặt cắt / chi tiết", mo_ta="Các lớp vật liệu song song, mỗi lớp một hình chữ nhật có hatch. huong \"ngang\": các lớp xếp chồng theo y (từ dưới lên), dài theo x; huong \"dung\": xếp theo x (từ trái sang phải), dài theo y. Vật liệu (danh sách đóng): be_tong, gach, vua, dat, thep (hatch 45° hoặc 135°, khoảng cách cố định theo vật liệu).",
+         tham_so=[_p("id", "chuỗi duy nhất"), _p("goc", "góc dưới-trái của lớp đầu, " + PT), _p("huong", "\"ngang\" | \"dung\""), _p("dai", "chiều dài mỗi lớp, mm > 0"), _p("lop", "danh sách {\"vat_lieu\": ..., \"day\": mm > 0}"), _p("tong_day", "(tuỳ chọn) tổng bề dày khai báo; không bằng tổng các lớp thì báo lỗi", False)],
+         vi_du={"loai": "lop_vat_lieu", "id": "NEN", "goc": [-600, -300], "huong": "ngang", "dai": 4200, "lop": [{"vat_lieu": "dat", "day": 150}, {"vat_lieu": "be_tong", "day": 100}, {"vat_lieu": "vua", "day": 50}], "tong_day": 300}),
+    dict(loai="san", nhom="mặt cắt / chi tiết", mo_ta="Sàn / dầm / cột (mặt cắt hoặc mặt đứng) dạng hình chữ nhật có hatch. Ba loại san, dam, cot_mc cùng tham số.", tham_so=[_p("id", "chuỗi duy nhất"), _p("hcn", "[x0, y0, x1, y1] mm, x1 > x0, y1 > y0"), _p("vat_lieu", "be_tong | gach | vua | dat | thep", False, "be_tong")],
+         vi_du={"loai": "san", "id": "SAN", "hcn": [-100, 3000, 3000, 3120]}),
+    dict(loai="mong_don", nhom="mặt cắt / chi tiết", mo_ta="Móng đơn dạng bậc: bê tông lót, đế móng, cổ móng (cùng trục giữa), mỗi khối có hatch bê tông.", tham_so=[_p("id", "chuỗi duy nhất"), _p("goc", "góc dưới-trái của lớp lót"), _p("dai_lot", "mm"), _p("day_lot", "mm"), _p("dai_mong", "mm, ≤ dai_lot"), _p("day_mong", "mm"), _p("dai_co", "mm, ≤ dai_mong"), _p("cao_co", "mm")],
+         vi_du={"loai": "mong_don", "id": "M1", "goc": [0, -1100], "dai_lot": 1300, "day_lot": 100, "dai_mong": 1100, "day_mong": 300, "dai_co": 300, "cao_co": 700}),
+    dict(loai="cot_chi_tiet", nhom="mặt cắt / chi tiết", mo_ta="Mặt cắt cột: hình chữ nhật bê tông, thép đai (lùi bao_ve), thép dọc (vòng tròn) dàn đều ở hàng trên và hàng dưới.", tham_so=[_p("id", "chuỗi duy nhất"), _p("hcn", "[x0, y0, x1, y1]"), _p("bao_ve", "lớp bê tông bảo vệ, mm"), _p("d", "đường kính thép dọc, mm"), _p("n_tren", "số thanh hàng trên, 2-20"), _p("n_duoi", "số thanh hàng dưới, 2-20")],
+         vi_du={"loai": "cot_chi_tiet", "id": "CT", "hcn": [3200, -400, 3500, 0], "bao_ve": 25, "d": 16, "n_tren": 2, "n_duoi": 2}),
+    dict(loai="cua_dung", nhom="mặt đứng", mo_ta="Cửa trên mặt đứng: khung ngoài, cánh lùi 60 mm; kieu \"so\": một thanh đứng giữa; kieu \"di\": hai nét đứt hình chữ V chỉ chiều mở (đỉnh V ở phía KHÔNG có bản lề).", tham_so=[_p("id", "chuỗi duy nhất"), _p("hcn", "[x0, y0, x1, y1], rộng và cao hơn 120 mm"), _p("kieu", "\"di\" | \"so\""), _p("ban_le", "\"trai\" | \"phai\" (chỉ cho kieu di)", False, "trai")],
+         vi_du={"loai": "cua_dung", "id": "CD1", "hcn": [1000, 0, 2100, 2200], "kieu": "di", "ban_le": "trai"}),
+    dict(loai="mai", nhom="mặt đứng / mặt cắt", mo_ta="Mái: hai đường (mặt trên và mặt dưới, cách nhau day theo phương đứng) và hai đầu hồi. kieu: \"bang\" (nằm ngang), \"1_mai\" (dốc lên về phía phải), \"2_mai\" (đỉnh giữa nhịp). tu là điểm mép trên trái ở trục trái; vuon là phần nhô ra hai bên theo phương ngang, giữ nguyên độ dốc.",
+         tham_so=[_p("id", "chuỗi duy nhất"), _p("kieu", "bang | 1_mai | 2_mai"), _p("tu", PT), _p("nhip", "mm"), _p("do_doc", "% trong (0, 100]; bỏ trống với bang", False), _p("day", "bề dày theo phương đứng, mm"), _p("vuon", "mm", False, 0)],
+         vi_du={"loai": "mai", "id": "M1", "kieu": "2_mai", "tu": [0, 3300], "nhip": 9000, "do_doc": 30, "day": 120, "vuon": 600}),
+    dict(loai="lan_can", nhom="mặt đứng / mặt cắt", mo_ta="Lan can: các trụ đứng cách đều (khoảng ≤ buoc), tay vịn trên cùng và thanh giữa. Cao dưới 900 mm bị cảnh báo mềm (kinh nghiệm thực tế, không phải điều khoản TCVN).", tham_so=[_p("id", "chuỗi duy nhất"), _p("tu", "góc dưới-trái, " + PT), _p("dai", "mm"), _p("cao", "mm"), _p("buoc", "khoảng cách tối đa giữa các trụ, mm")],
+         vi_du={"loai": "lan_can", "id": "LC", "tu": [0, 3000], "dai": 3000, "cao": 1000, "buoc": 1000}),
+    dict(loai="bac_thang_don_gian", nhom="mặt cắt", mo_ta="Mặt cắt bậc thang: đường gấp khúc so_bac bậc. 2h + b ngoài 600-630 mm bị cảnh báo mềm (kinh nghiệm thực tế, không phải điều khoản TCVN).", tham_so=[_p("id", "chuỗi duy nhất"), _p("tu", "chân bậc đầu, " + PT), _p("so_bac", "2-60"), _p("cao_bac", "mm"), _p("rong_bac", "mm")],
+         vi_du={"loai": "bac_thang_don_gian", "id": "BT", "tu": [0, 0], "so_bac": 10, "cao_bac": 170, "rong_bac": 270}),
+    dict(loai="cao_do", nhom="ký hiệu", mo_ta="Ký hiệu cao độ (tam giác + gạch ngang + chữ). Chữ TỰ TÍNH = cao_m của mức tham chiếu + (y - y tham chiếu)/1000, 3 chữ số thập phân; mức tham chiếu khai ở hinh.mo_cao = {\"y\": mm, \"cao_m\": m} (mặc định y 0 ứng với ±0.000).",
+         tham_so=[_p("vi_tri", "mũi tam giác " + PT), _p("huong", "\"phai\" | \"trai\" (gạch ngang kéo về phía nào)", False, "phai")], vi_du={"loai": "cao_do", "vi_tri": [9600, 3300], "huong": "phai"}),
+    dict(loai="ghi_chu_dan", nhom="ký hiệu", mo_ta="Ghi chú có đường dẫn: mũi tên 45° tại diem, đường dẫn tới vi_tri, chữ nằm bên phải (hoặc bên trái nếu vi_tri ở bên trái diem). Chữ không được chạm nét khác.", tham_so=[_p("chu", "chuỗi hoặc danh sách dòng"), _p("diem", "điểm chỉ tới " + PT), _p("vi_tri", "đầu kia của đường dẫn " + PT), _p("cao", "2.5 | 3.5 | 5", False, 2.5), _p("dam", "đậm", False, False)],
+         vi_du={"loai": "ghi_chu_dan", "chu": ["BÊ TÔNG LÓT"], "diem": [1500, -200], "vi_tri": [2200, -900]}),
+    dict(loai="dau_cat", nhom="ký hiệu", mo_ta="Dấu cắt mặt cắt: đường đậm từ tu tới den (ngang hoặc đứng) và hai cánh dài 8 mm giấy về phía nhìn, chữ ten ở đầu mỗi cánh.", tham_so=[_p("id", "chuỗi duy nhất"), _p("ten", "1-3 ký tự"), _p("tu", PT), _p("den", PT), _p("nhin", "tren | duoi (đường ngang); trai | phai (đường đứng)")],
+         vi_du={"loai": "dau_cat", "id": "DC1", "ten": "1", "tu": [0, 1500], "den": [4000, 1500], "nhin": "tren"}),
+    dict(loai="tuyen_gio", nhom="ký hiệu", mo_ta="Tuyến gió (trục) trên mặt đứng: đường chấm gạch thẳng đứng từ tu_y tới den_y và vòng ký hiệu ở đầu trên.", tham_so=[_p("id", "chuỗi duy nhất"), _p("ten", "1-3 ký tự"), _p("x", "mm"), _p("tu_y", "mm"), _p("den_y", "mm, lớn hơn tu_y")],
+         vi_du={"loai": "tuyen_gio", "id": "G1", "ten": "1", "x": 0, "tu_y": -450, "den_y": 5000}),
+]
+
 LAYERS = {"tuong": "NET-CHINH (nét đậm)", "cửa đi / cửa sổ / nội thất / mũi tên bắc / phần tử thô mặc định": "NET-MANH (nét mảnh)", "trục": "TRUC (nét chấm gạch) + TRUC-KYHIEU (vòng, chữ)", "kích thước": "KICH-THUOC",
-          "chữ (nhãn phòng, ghi chú, tên hình, nhãn nội thất)": "CHU", "phần tử thô": "NET-CHINH | NET-MANH | NET-KHUAT (nét đứt) | NET-TAM (nét chấm gạch) theo tham số lop"}
+          "chữ (nhãn phòng, ghi chú, tên hình, nhãn nội thất)": "CHU", "hatch vật liệu": "MAT-CAT", "cửa đứng nét khuất (chiều mở)": "NET-KHUAT", "phần tử thô": "NET-CHINH | NET-MANH | NET-KHUAT (nét đứt) | NET-TAM (nét chấm gạch) theo tham số lop"}
 
 
 def guide() -> dict:
     return dict(
-        mo_ta="Bản vẽ tự do (loại E) cho công trình dân dụng ngoài 4 loại chuẩn: dựng từ một danh sách PHẦN TỬ có sẵn (tường, cửa, phòng, nội thất, kích thước tự đo, chữ...) rồi vẽ ra DXF + DWG + PDF + PNG với khung tên TCVN 5571:2012, khổ A3/A2/A1 và tỷ lệ tự chọn, kèm kiểm tra tự động. Giai đoạn hiện tại: MỘT hình trên một tờ (mặt bằng).",
+        mo_ta="Bản vẽ tự do (loại E) cho công trình dân dụng ngoài 4 loại chuẩn: dựng từ một danh sách PHẦN TỬ có sẵn (tường, cửa, phòng, nội thất, kích thước tự đo, chữ...) rồi vẽ ra DXF + DWG + PDF + PNG với khung tên TCVN 5571:2012, khổ A3/A2/A1 và tỷ lệ tự chọn, kèm kiểm tra tự động. Giai đoạn hiện tại: MỘT hình trên một tờ (mặt bằng, mặt đứng, mặt cắt, chi tiết cấu tạo); sơ đồ điện nước và nhiều hình trên một tờ CHƯA có.",
         quy_trinh=["1. Hỏi khách các số còn thiếu (kích thước phòng, bề dày tường, vị trí/bề rộng cửa...). KHÔNG tự đoán số; không có số thì HỎI.",
                    "2. Soạn spec JSON theo danh mục dưới đây; KHÔNG viết mã FreeCAD hay Python. Chỉ dùng các phần tử trong danh mục.",
                    "3. LUÔN gọi kiem_tra_spec trước. Lỗi báo đúng phần tử (chỉ số phan_tu) và tham số: sửa theo thông báo rồi gọi lại. Trình bày cho khách bảng số liệu (kích thước phòng, diện tích, số cửa, khổ giấy, tỷ lệ, cảnh báo) và CHỜ khách nói OK.",

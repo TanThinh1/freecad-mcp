@@ -20,6 +20,7 @@ from build_a import _moved
 from primitives import Circle, Drawing, Line, Rect, Text, cap_to_em, drawing_extent
 from scale import place_rects, sheet_scale_candidates
 from spec_b import SpecError
+import elems2
 from spec_e import (ARC_STEPS_90, AUTO_SCALES, LAYER_OF, fmt2, fmt_len, leg_pieces, leg_rect, resolve, wall_legs)
 from tcvn import ARIAL_CAP, SHEETS, cons_width, LAYER_AXIS, LAYER_BUBBLE, LAYER_DIM, LAYER_TEXT
 from verify import _seg_rect_gap
@@ -126,21 +127,22 @@ class Sheetwork:
         return self.add(Line(layer=layer, tag=tag, p1=(fl(a[0]), fl(a[1])), p2=(fl(b[0]), fl(b[1]))))
 
     def hits(self, box, exclude_tag="", m=None):
+        """'' when the box is free, else a short description of the first thing it touches (tag of the line / circle, or 'chữ khác')."""
         m = self.P["le_chu"] if m is None else m
         for p in self.prims:
             if exclude_tag and p.tag.startswith(exclude_tag):
                 continue
             if isinstance(p, Line):
                 if _seg_rect_gap(p.p1, p.p2, box) < m:
-                    return True
+                    return p.tag or "nét"
             elif isinstance(p, Rect):
                 x0, y0, x1, y1 = p.p0[0], p.p0[1], p.p1[0], p.p1[1]
                 if any(_seg_rect_gap(a, b, box) < m for a, b in (((x0, y0), (x1, y0)), ((x1, y0), (x1, y1)), ((x1, y1), (x0, y1)), ((x0, y1), (x0, y0)))):
-                    return True
+                    return p.tag or "hình chữ nhật"
             elif isinstance(p, Circle):
                 if box_hits_circle(box, p.c, p.r, m):
-                    return True
-        return any(boxes_overlap(box, b, TEXT_GAP) for b in self.boxes)
+                    return p.tag or "vòng tròn"
+        return "chữ khác" if any(boxes_overlap(box, b, TEXT_GAP) for b in self.boxes) else ""
 
     def text(self, tag, layer, s, h, pos, halign="left", rot=0.0, bold=False):
         t = self.add(Text(layer=layer, tag=tag, s=s, pos=(pos[0], pos[1]), h=h, rot=rot, halign=halign, bold=bold))
@@ -149,10 +151,12 @@ class Sheetwork:
 
     def place(self, tag, layer, s, h, candidates, who, exclude_tag="", bold=False, margin=None):
         """candidates = [(pos, halign, rot)]. First free one wins; none -> Unplaceable."""
+        blocker = ""
         for pos, halign, rot in candidates:
-            if not self.hits(text_box(s, h, pos, halign, rot, bold), exclude_tag, margin):
+            blocker = self.hits(text_box(s, h, pos, halign, rot, bold), exclude_tag, margin)
+            if not blocker:
                 return self.text(tag, layer, s, h, pos, halign, rot, bold)
-        raise Unplaceable(f"{who}: không đặt được chữ {s[:40]!r} (cao {h:g} mm) mà không chạm nét hoặc chữ khác (đã thử {len(candidates)} vị trí, chừa {self.P['le_chu']:g} mm)")
+        raise Unplaceable(f"{who}: không đặt được chữ {s[:40]!r} (cao {h:g} mm) mà không chạm nét hoặc chữ khác (đã thử {len(candidates)} vị trí; vị trí cuối chạm {blocker!r}). Dịch vi_tri / diem hoặc đổi tỷ lệ")
 
 
 # ------------------------------------------------------------------ geometry of the elements
@@ -254,6 +258,7 @@ def build_geometry(sp, view, W, X):
             W.add(Circle(layer="NET-MANH", tag="bac_vong", c=c, r=R))
             for p, q in ((tip, b1), (tip, b2), (b1, b2)):
                 W.line("NET-MANH", "bac_tam_giac", p, q)
+    elems2.geom(sp, view, W, X)
 
 
 def geometry_extent(W, skip=()):
@@ -415,6 +420,7 @@ def build_dims(sp, view, W, X, ext):
 def build_labels(sp, view, W, X):
     P = sp["params"]
     hn, ha, hf = P["cao_chu_ten_phong"], P["cao_chu_ghi_chu"], P["cao_chu_noi_that"]
+    elems2.labels2(sp, view, W, X)
     order = {"noi_that_co_ban": 0, "phong": 1}
     for e in sorted(view["elems"], key=lambda q: (order.get(q["t"], 2), q["idx"])):
         t = e["t"]

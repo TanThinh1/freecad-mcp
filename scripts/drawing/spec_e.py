@@ -523,7 +523,7 @@ def resolve(view, ref, want, path, ctx):
         if t == "phong":
             xs, ys = [p[0] for p in e["da_giac"]], [p[1] for p in e["da_giac"]]
             box = (min(xs), min(ys), max(xs), max(ys))
-        elif t == "noi_that_co_ban":
+        elif e.get("box") is not None:
             box = e["box"]
         elif t in ("tron", "cung"):
             c, r = e["tam"], e["ban_kinh"]
@@ -590,7 +590,14 @@ def validate(spec) -> dict:
         if total > MAX_ELEMENTS:
             errors.append(f"spec có {total} phần tử, vượt giới hạn {MAX_ELEMENTS}.")
             continue
-        view = dict(id=hid, ten=hten.strip(), scale=vscale, elems=[], by_id={}, failed=set())
+        mo = None
+        if "mo_cao" in h:
+            m = h["mo_cao"]
+            if not isinstance(m, dict) or set(m) - {"y", "cao_m"} or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in m.values()):
+                errors.append(f"{hp}.mo_cao = {m!r} phải là {{\"y\": mm, \"cao_m\": mét}} (mức tham chiếu của ký hiệu cao độ).")
+            else:
+                mo = (fr(m.get("y", 0)), fr(m.get("cao_m", 0)))
+        view = dict(id=hid, ten=hten.strip(), scale=vscale, elems=[], by_id={}, failed=set(), mo_cao=mo)
         views.append(view)
         for i, e in enumerate(elems):
             t = e.get("loai") if isinstance(e, dict) else None
@@ -689,8 +696,11 @@ def validate(spec) -> dict:
                 if a["vi_tri"] + a["rong"] > b["vi_tri"]:
                     ctx.err(b["path"], f"chồng lên {a['id']!r} (phần tử {a['idx']}) trên đoạn {k} của tường {wid!r}: {a['id']!r} kết thúc ở {fnum(a['vi_tri'] + a['rong'])} mm, {b['id']!r} bắt đầu ở {fnum(b['vi_tri'])} mm.")
     for view in views:
-        if not any(e["t"] in ("tuong", "duong", "polyline", "cung", "tron", "noi_that_co_ban", "truc") for e in view["elems"]) and view["elems"]:
+        if not any(e["t"] in ("tuong", "duong", "polyline", "cung", "tron", "noi_that_co_ban", "truc", "lop_vat_lieu", "san", "dam", "cot_mc", "mong_don", "cot_chi_tiet", "cua_dung", "mai", "lan_can", "bac_thang_don_gian") for e in view["elems"]) and view["elems"]:
             ctx.err(f"hinh {view['id']!r}", "hình chưa có phần tử hình học nào (tuong, truc, noi_that_co_ban, duong, polyline, cung, tron).")
     if errors:
         raise SpecError(errors)
     return dict(loai="E", ten=ten, kho_giay=kho, ty_le=ty_le, scale=scale, khung_ten=kt, params=params, views=views, warnings=ctx.warnings, n_elements=total)
+
+
+import elems2  # noqa: E402,F401  (registers the phase 2 elements into CATALOG at its own end; works whichever module is imported first)
