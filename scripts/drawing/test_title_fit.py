@@ -1,9 +1,10 @@
-"""Title-block text fitting tests (no FreeCAD / no PDF needed): every text printed in a title-block cell must shrink to fit its cell by the worst-case estimate
-(every character 1 em wide): width factor down to 0.7, then em size down to 2 mm, then two lines when the cell has room, else a Vietnamese error.
+"""Title-block text fitting tests (no FreeCAD / no PDF needed): every text printed in a title-block cell must shrink to fit its cell by the Arial-width estimate
+(real advance widths from arial.ttf + 5 %): width factor down to 0.7, then em size down to 2 mm, then two lines when the cell has room, else a Vietnamese error.
 
     python scripts/drawing/test_title_fit.py       (needs TCVN_PROFILE)
 Covers: the 4-word names, 40-character strings, the default sample names (content unchanged), a property sweep over every field, DXF code 41, the PDF template
-taking the same size / width factor as the primitives, and mutants that 1.31 / 2.13 / 5.7 must catch.
+taking the same size / width factor as the primitives, mutants that 1.31 / 2.13 / 5.7 must catch, and the text anchors: centred / right TEXT carry the real left end of the
+baseline in code 10 (2.14, 3.8; mutant 10 = 11; ODA DXF -> DWG -> DXF round trip), the Arial width table equal to arial.ttf.
 """
 from __future__ import annotations
 
@@ -114,13 +115,13 @@ def default_names():
 case("default_sample_names_keep_their_text", default_names)
 
 
-def sample_is_shrunk_not_cut():
+def samples_keep_the_old_size():
     _, D = build("A")
-    p = [p for p in D.prims if getattr(p, 'field', '') == "row1_name"][0]
-    return p.s == "NGUYỄN VĂN A" and p.wf < 1.0 and abs(cap_to_em(p.h) - 2.5) < 1e-9, f"wf {p.wf:g}, em {cap_to_em(p.h):.2f}"
+    got = {getattr(p, "field", ""): (round(cap_to_em(p.h), 4), p.wf) for p in D.prims if getattr(p, "field", "") in ("row1_name", "row2_name", "row3_name")}
+    return got == {"row1_name": (2.5, 1.0), "row2_name": (2.5, 1.0), "row3_name": (2.5, 1.0)}, f"(cỡ chữ em, hệ số rộng) {got}"
 
 
-case("NGUYEN_VAN_A_only_the_width_factor_is_lowered", sample_is_shrunk_not_cut)
+case("default_sample_names_keep_the_old_size_2.5_and_width_factor_1_by_real_Arial_widths", samples_keep_the_old_size)
 
 
 # ---------------------------------------------------------------- (b) 40-character strings: shrink to the limit, then break or error, never overflow
@@ -197,8 +198,8 @@ def dxf_has_41():
     for e in dx["ents"]:
         if e["type"] == "TEXT" and e["rec"].get(1, [""])[0] in LONG.values():
             got[e["rec"][1][0]] = float(e["rec"][41][0]) if 41 in e["rec"] else 1.0
-    want = {p_.s: p_.wf for p_ in D.prims if getattr(p_, 'field', '') in ("row1_name", "row3_name") and p_.s in LONG.values()}
-    return got == want and any(v < 1.0 for v in got.values()), f"DXF {got}; primitives {want}"
+    want = {p_.s: p_.wf for p_ in D.prims if getattr(p_, 'field', '') in ("row1_name", "row2_name", "row3_name") and p_.s in LONG.values()}
+    return got == want and len(want) == 3 and any(v < 1.0 for v in got.values()), f"DXF {got}; primitives {want}"
 
 
 case("dxf_text_has_width_factor_code_41_equal_to_primitive", dxf_has_41)
@@ -336,6 +337,137 @@ def pdf_fit(glyph_fn):
 case("pdf_5.7_positive_control_ink_inside_the_cell_passes", lambda: (not pdf_fit(lambda b: (b[0] + 2.0, b[1] + 2.0, b[2] - 2.0, b[3] - 2.0)), "ok"))
 case("pdf_5.7_ink_crossing_the_right_cell_line_is_caught", lambda: ("5.7" in pdf_fit(lambda b: (b[0] + 10.0, b[1] + 2.0, b[2] + 0.5, b[3] - 2.0)), "bị bắt"))
 case("pdf_5.7_ink_within_1mm_of_the_cell_line_is_caught", lambda: ("5.7" in pdf_fit(lambda b: (b[0] + 8.0, b[1] + 2.0, b[2] - 0.5, b[3] - 2.0)), "bị bắt"))
+
+
+# ---------------------------------------------------------------- text anchors (code 10 = real left end of the baseline) and the Arial measurement
+import fontmetrics  # noqa: E402
+import oda  # noqa: E402
+from dxfw import Dxf  # noqa: E402
+
+
+def anchor_ids(dx, D, group=2, cid="2.14"):
+    C = verify.Checks()
+    verify.check_text_anchor(C, D, dx, group, cid, "DXF")
+    return ids(C), [c["detail"] for c in C.items]
+
+
+def case_font_table_equals_ttf():
+    if not fontmetrics.have_ttf(False) or not fontmetrics.have_ttf(True):
+        return True, "không có arial.ttf trên máy này: bỏ qua so sánh (kiểm bằng bảng nhúng)"
+    import arial_widths as A
+    bad = [c for tab, b in ((A.REGULAR, False), (A.BOLD, True)) for c in tab if c and abs(tab[c] / tab[0] - fontmetrics.char_em(chr(c), b, "ttf")) > 1e-9]
+    return not bad and abs(fontmetrics.text_em("NGUYỄN VĂN A", source="ttf") - 7.5571) < 1e-3, f"{len(A.REGULAR)} ký tự thường, {len(A.BOLD)} đậm; lệch {bad[:3]}"
+
+
+case("arial_width_table_equals_the_real_arial_ttf", case_font_table_equals_ttf)
+case("unknown_character_counts_as_the_widest_capital", lambda: (abs(fontmetrics.char_em("Ж") - fontmetrics.widest_capital_em()) < 1e-9 and fontmetrics.widest_capital_em() > 0.94, f"{fontmetrics.char_em('Ж'):.4f}"))
+
+
+def dxfw_anchor_geometry():
+    d = Dxf(ltscale=1.0, utf8=True)
+    d.add_layer("CHU")
+    d.add_style("S", "arial.ttf")
+    h = 10.0
+    w = fontmetrics.text_em("NGUYỄN VĂN A") * (h / 0.716)
+    d.text("CHU", "NGUYỄN VĂN A", (100.0, 50.0), h, 0.0, "S", "center")
+    d.text("CHU", "NGUYỄN VĂN A", (100.0, 50.0), h, 0.0, "S", "right")
+    d.text("CHU", "NGUYỄN VĂN A", (100.0, 50.0), h, 0.0, "S", "left")
+    d.text("CHU", "NGUYỄN VĂN A", (100.0, 50.0), h, 90.0, "S", "center")
+    d.text("CHU", "NGUYỄN VĂN A", (100.0, 50.0), h, 0.0, "S", "center", wf=0.7)
+    p = os.path.join(WORK, "anchor.dxf")
+    d.save(p)
+    tx = [e["rec"] for e in read_dxf(p)["ents"] if e["type"] == "TEXT"]
+    g = lambda r, c: float(r[c][0])
+    ok = (abs(g(tx[0], 10) - (100 - w / 2)) < 1e-4 and abs(g(tx[0], 11) - 100) < 1e-9 and
+          abs(g(tx[1], 10) - (100 - w)) < 1e-4 and abs(g(tx[1], 11) - 100) < 1e-9 and
+          abs(g(tx[2], 10) - 100) < 1e-9 and 11 not in tx[2] and
+          abs(g(tx[3], 10) - 100) < 1e-4 and abs(g(tx[3], 20) - (50 - w / 2)) < 1e-4 and
+          abs(g(tx[4], 10) - (100 - 0.7 * w / 2)) < 1e-4)
+    return ok, f"rộng {w:.3f}: trung tâm 10={g(tx[0], 10):.3f}, phải 10={g(tx[1], 10):.3f}, quay 90° 20={g(tx[3], 20):.3f}, wf 0.7 10={g(tx[4], 10):.3f}"
+
+
+case("dxfw_writes_code_10_as_the_real_left_end_for_centre_right_rotated_and_width_factor", dxfw_anchor_geometry)
+
+
+def tt_dxf(name="anch"):
+    _, D = build("A")
+    p = os.path.join(WORK, name + ".dxf")
+    render_dxf(D, profile, p)
+    return D, p
+
+
+def anchors_pass():
+    D, p = tt_dxf()
+    bad, det = anchor_ids(read_dxf(p), D)
+    n = sum(1 for q in D.prims if isinstance(q, Text) and q.halign in ("center", "right"))
+    return not bad and n > 30, f"{n} TEXT căn giữa/phải; {det[0][:170]}"
+
+
+case("every_centred_text_of_the_stair_has_code_10_at_its_real_left_end_2.14", anchors_pass)
+
+
+def equal_10_11(raw):
+    """Mutant = the behaviour before the fix: code 10 = code 11 for every justified TEXT."""
+    L = raw.split(b"\r\n")
+    k = 0
+    while k < len(L) - 1:
+        if L[k].strip() == b"0" and L[k + 1].strip() == b"TEXT":
+            j = k + 2
+            while j < len(L) - 1 and L[j].strip() != b"0":
+                j += 2
+            ent = {L[q].strip(): q for q in range(k + 2, j, 2)}
+            if b"72" in ent and L[ent[b"72"] + 1].strip() in (b"1", b"2") and b"11" in ent:
+                L[ent[b"10"] + 1], L[ent[b"20"] + 1] = L[ent[b"11"] + 1], L[ent[b"21"] + 1]
+            k = j
+        else:
+            k += 2
+    return b"\r\n".join(L)
+
+
+def mutant_10_eq_11():
+    D, p = tt_dxf("m1011")
+    raw = open(p, "rb").read()
+    mut = equal_10_11(raw)
+    open(p, "wb").write(mut)
+    bad, det = anchor_ids(read_dxf(p), D)
+    bad3, _ = anchor_ids(read_dxf(p), D, 3, "3.8")
+    return raw != mut and "2.14" in bad and "3.8" in bad3, f"bị bắt: 2.14 {sorted(bad)}, 3.8 {sorted(bad3)}; {det[0][:140]}"
+
+
+case("mutant_code_10_equals_code_11_is_caught_by_2.14_and_3.8", mutant_10_eq_11)
+
+
+def mutant_half_width_wrong():
+    D, p = tt_dxf("mhalf")
+    L = open(p, "rb").read().split(b"\r\n")
+    for k in range(0, len(L) - 1, 2):
+        if L[k].strip() == b"11":                                     # move every alignment point 3 mm (paper, 1:20) away from the true centre
+            L[k + 1] = str(float(L[k + 1]) + 60.0).encode()
+    open(p, "wb").write(b"\r\n".join(L))
+    bad, _ = anchor_ids(read_dxf(p), D)
+    return "2.14" in bad, f"bị bắt: {sorted(bad)}"
+
+
+case("mutant_centre_point_3mm_off_the_computed_half_width_is_caught", mutant_half_width_wrong)
+
+
+def dwg_roundtrip():
+    D, p = tt_dxf("rt")
+    dwg, back = os.path.join(WORK, "rt.dwg"), os.path.join(WORK, "rt_back.dxf")
+    try:
+        r1 = oda.dxf_to_dwg(p, dwg, "ACAD2018")
+        r2 = oda.dwg_to_dxf(dwg, back, "ACAD2018")
+    except oda.OdaError as e:
+        return True, f"không có ODA trên máy này: bỏ qua ({str(e)[:60]})"
+    if not (r1.get("ok") and r2.get("ok")):
+        return False, f"ODA lỗi {r1} {r2}"
+    bx = read_dxf(back)
+    bad, det = anchor_ids(bx, D, 3, "3.8")
+    e0 = next(e for e in bx["ents"] if e["type"] == "TEXT" and 72 in e["rec"] and int(float(e["rec"][72][0])) == 1)
+    return not bad, f"sau khứ hồi DWG: {det[0][:150]}; mẫu 10={e0['rec'][10][0]} 11={e0['rec'][11][0]}"
+
+
+case("dwg_round_trip_through_ODA_keeps_code_10_at_the_real_left_end_3.8", dwg_roundtrip)
 
 ok_all = True
 for name, ok, detail in results:

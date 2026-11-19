@@ -19,7 +19,7 @@ import titleblock as TBK
 from dxf_render import expected_counts
 from primitives import Circle, Line, Rect, Text, cap_to_em, fmt_value
 from readers import analyze_pdf, f, read_dxf, unesc
-from tcvn import LAYER_AXIS, LAYER_COLUMN, LAYER_DIM, LTYPES, SHEETS, layer_style
+from tcvn import ARIAL_CAP, LAYER_AXIS, LAYER_COLUMN, LAYER_DIM, LTYPES, SHEETS, layer_style
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FREECADCMD = os.environ.get("FREECADCMD_EXE") or os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "FreeCAD 1.1", "bin", "FreeCADCmd.exe")
@@ -360,6 +360,7 @@ def check_dwg(C: Checks, D, dx_src: dict, dwg: str, workdir: str, dwg_info: dict
     C.add(3, "3.6", "$LTSCALE và mẫu nét giữ nguyên sau khứ hồi", close(bx["ltscale"], D.scale, 1e-9) and all(bx["ltypes"].get(k) == [float(x) for x in v[1]] for k, v in LTYPES.items()),
           f"LTSCALE {bx['ltscale']:g}; {bx['ltypes'].get('CENTER')}")
     check_title_fit_dxf(C, D, bx, 3, "3.7", "DWG (đọc lại sau khứ hồi)")
+    check_text_anchor(C, D, bx, 3, "3.8", "DWG (đọc lại sau khứ hồi)")
 
 
 # ------------------------------------------------------------------ 4/5. PDF
@@ -545,10 +546,10 @@ def check_title_rows(C: Checks, D, sp):
           f"nguồn {kt.get('ky_nguon')}; {nonempty_roles} hàng có nhãn; ô {got}; đủ chữ trong khung tên {printed_ok}; nằm trong khối trái {inside}")
 
 
-def _fit_problems(cells, s, ax, ay, h, wf, halign):
-    """Why a title-block text (string s, anchor, cap height h, width factor wf) does not stay inside its cell, per the worst-case estimate; [] when it fits."""
+def _fit_problems(cells, s, ax, ay, h, wf, halign, bold=False):
+    """Why a title-block text (string s, anchor, cap height h, width factor wf) does not stay inside its cell, per the Arial-width estimate (+5 %); [] when it fits."""
     em = cap_to_em(h)
-    w = TBK.cons_width(s, em, wf)
+    w = TBK.cons_width(s, em, wf, bold)
     cell = [c for c in cells if c[0] <= ax <= c[2] and c[1] < ay <= c[3]]
     if not cell:
         return ["không nằm trong ô nào"]
@@ -556,7 +557,7 @@ def _fit_problems(cells, s, ax, ay, h, wf, halign):
     x0, x1 = {"left": (ax, ax + w), "center": (ax - w / 2, ax + w / 2), "right": (ax - w, ax)}[halign]
     bad = []
     if x0 < c[0] + TBK.TB_MARGIN - 1e-6 or x1 > c[2] - TBK.TB_MARGIN + 1e-6:
-        bad.append(f"rộng {w:.1f} mm (thận trọng) tràn ô {c[2] - c[0]:g} mm (lề {TBK.TB_MARGIN:g} mm)")
+        bad.append(f"rộng {w:.1f} mm (đo Arial + 5 %) tràn ô {c[2] - c[0]:g} mm (lề {TBK.TB_MARGIN:g} mm)")
     if em < TBK.MIN_EM - 1e-6 or not (TBK.MIN_WF - 1e-6 <= wf <= 1.0 + 1e-6):
         bad.append(f"cỡ chữ {em:.2f} mm, hệ số rộng {wf:g} ngoài giới hạn ({TBK.MIN_EM:g} mm, {TBK.MIN_WF:g})")
     if ay < c[1] + 0.3 or ay + h > c[3] - 0.5:
@@ -566,13 +567,13 @@ def _fit_problems(cells, s, ax, ay, h, wf, halign):
 
 def check_title_fit(C: Checks, D):
     """1.31: every text printed in a title-block cell (names, date, project, investor, firm, title, symbol, scale, captions) stays inside its cell minus a 1.5 mm margin
-    on each side by the worst-case estimate (every character 1 em wide, independent of the machine's font), with em size >= 2 mm and width factor in [0.7, 1]."""
+    on each side by the Arial-width estimate (real advance widths + 5 %), with em size >= 2 mm and width factor in [0.7, 1]."""
     sh = SHEETS[D.sheet]
     cells = TBK.all_cells(sh)
     tx = [p for p in D.prims if isinstance(p, Text) and p.tag in ("tb_text", "tb_caption")]
-    bad = [(t.s, b) for t in tx for b in [_fit_problems(cells, t.s, t.pos[0], t.pos[1], t.h, t.wf, t.halign)] if b]
+    bad = [(t.s, b) for t in tx for b in [_fit_problems(cells, t.s, t.pos[0], t.pos[1], t.h, t.wf, t.halign, t.bold)] if b]
     n_fit = sum(1 for t in tx if t.wf < 1.0 - 1e-9 or abs(cap_to_em(t.h) - TBK.FIELDS.get(t.field, (0, 0, 0, cap_to_em(t.h)))[3]) > 1e-6)
-    C.add(1, "1.31", "chữ trong mọi ô khung tên không vượt bề rộng ô (ước lượng thận trọng, lề 1,5 mm); co chữ: hệ số rộng ≥ 0,7, cao ≥ 2 mm", bool(tx) and not bad,
+    C.add(1, "1.31", "chữ trong mọi ô khung tên không vượt bề rộng ô (đo theo font Arial + 5 % dự phòng, lề 1,5 mm); co chữ: hệ số rộng ≥ 0,7, cao ≥ 2 mm", bool(tx) and not bad,
           f"{len(tx)} chữ trong khung tên, {n_fit} chữ đã co; vi phạm: {bad[:3]}")
 
 
@@ -603,8 +604,44 @@ def check_title_fit_dxf(C: Checks, D, dx: dict, group: int, cid: str, label: str
         if b:
             bad.append((txt, b))
     want = sum(1 for p in D.prims if isinstance(p, Text) and p.tag in ("tb_text", "tb_caption"))
-    C.add(group, cid, f"chữ khung tên trong {label}: mọi TEXT nằm trong ô, không vượt bề rộng ô (ước lượng thận trọng, có xét hệ số rộng mã 41)", n == want and not bad,
+    C.add(group, cid, f"chữ khung tên trong {label}: mọi TEXT nằm trong ô, không vượt bề rộng ô (đo Arial + 5 %, có xét hệ số rộng mã 41)", n == want and not bad,
           f"{n}/{want} TEXT khung tên; vi phạm: {bad[:3]}")
+
+
+def check_text_anchor(C: Checks, D, dx: dict, group: int, cid: str, label: str):
+    """Every centred / right-aligned TEXT (code 72 = 1 or 2) must carry the REAL left end of its baseline in code 10: 10 + width/2 (centre) or 10 + width (right) = code 11,
+    within 1 mm on paper. Some readers (a DWG converted by ODA, as drawn by ZWCAD) place the text from code 10 and ignore the justification, so 10 = 11 shifts every
+    centred text to the right by half its width. The width is measured on the real Arial file when it is installed (else the embedded table), at the TEXT's own height and
+    width factor (code 41)."""
+    import fontmetrics
+    ttf = fontmetrics.have_ttf(False)
+    s = D.scale
+    n, worst, bad = 0, 0.0, []
+    for e in dx["ents"]:
+        if e["type"] != "TEXT":
+            continue
+        r = e["rec"]
+        try:
+            hj = int(float(r[72][0])) if 72 in r else 0
+            if hj not in (1, 2):
+                continue
+            x10, y10, x11, y11 = f(r, 10), f(r, 20), f(r, 11), f(r, 21)
+            h = f(r, 40) / s
+            wf = f(r, 41) if 41 in r else 1.0
+            phi = math.radians(f(r, 50) if 50 in r else 0.0)
+            txt = unesc("".join(r.get(3, [])) + (r.get(1) or [""])[0])
+        except (KeyError, ValueError, IndexError):
+            continue
+        n += 1
+        w = fontmetrics.text_em(txt, False, "ttf") * (h / ARIAL_CAP) * wf * (0.5 if hj == 1 else 1.0)          # paper mm, from the anchor back to the left end
+        ex, ey = x11 / s - w * math.cos(phi), y11 / s - w * math.sin(phi)
+        err = math.hypot(x10 / s - ex, y10 / s - ey)
+        worst = max(worst, err)
+        if err > 1.0:
+            bad.append((txt, round(err, 2)))
+    want = sum(1 for p in D.prims if isinstance(p, Text) and p.halign in ("center", "right"))
+    C.add(group, cid, f"{label}: mọi TEXT căn giữa/phải ghi mã 10 = điểm đầu chân chữ thật (10 + bề rộng/2 hoặc 10 + bề rộng = mã 11, sai số ≤ 1 mm giấy)", n == want and n > 0 and not bad,
+          f"{n}/{want} TEXT căn giữa/phải; sai lệch lớn nhất {worst:.2f} mm giấy (đo bằng {'arial.ttf' if ttf else 'bảng Arial nhúng'}); vi phạm: {bad[:3]}")
 
 
 def check_title_fit_pdf(C: Checks, D, paths):
@@ -643,6 +680,7 @@ def run_all(D, sp, profile, files: dict, do_fc=True, do_dwg=True, do_pdf=True, d
     check_title_fit(C, D)
     dx = check_dxf(C, D, sp, profile, files["dxf"], do_fc)
     check_title_fit_dxf(C, D, dx, 2, "2.13", "DXF")
+    check_text_anchor(C, D, dx, 2, "2.14", "DXF")
     if do_dwg:
         check_dwg(C, D, dx, files["dwg"], files.get("work") or os.path.dirname(files["dxf"]), dwg_info or {})
     if do_pdf:

@@ -69,16 +69,18 @@ def est_width(s: str, size: float, bold: bool = False) -> float:
     return w * size
 
 
-# Title-block fit (worst case, independent of the machine's font): every character, spaces included, is assumed to be 1 em wide (a full-width fallback font,
-# as ZWCAD showed for the sample names), the DXF width factor (code 41) is then lowered to MIN_WF, then the em size to MIN_EM, then the text is split, else an error.
-WORST_EM_PER_CHAR = 1.0
+# Title-block fit: the width of a string is measured with the real Arial advance widths (fontmetrics: TrueType hmtx; a character the font does not have counts as the
+# widest Vietnamese capital) plus a 5 % reserve. When it does not fit the cell: the DXF width factor (code 41) is lowered to MIN_WF, then the em size to MIN_EM, then
+# the text is split into two lines where the cell has room, else an error.
+WIDTH_RESERVE = 1.05
 TB_MARGIN = 1.5                  # mm kept free on each side of a title-block cell
 MIN_WF, MIN_EM = 0.7, 2.0
 
 
-def cons_width(s: str, em: float, wf: float = 1.0) -> float:
-    """Worst-case width (mm) of a string printed with em size `em` and DXF width factor `wf` (see WORST_EM_PER_CHAR)."""
-    return len(s) * WORST_EM_PER_CHAR * em * wf
+def cons_width(s: str, em: float, wf: float = 1.0, bold: bool = False) -> float:
+    """Conservative width (mm) of a string printed with em size `em` and DXF width factor `wf`: real Arial (regular or bold) advance widths x WIDTH_RESERVE."""
+    from fontmetrics import text_em
+    return WIDTH_RESERVE * text_em(s, bold) * em * wf
 
 
 class ProfileError(Exception):

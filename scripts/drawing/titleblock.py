@@ -64,46 +64,47 @@ CAPTIONS = [("3", 1.5, 3.4, "Tên bản vẽ"), ("7", 1.5, 3.4, "Tỷ lệ"), ("
 CAP_SIZE = 2.5
 
 
-def fit_line(text: str, em0: float, avail: float):
-    """Worst-case fit of one line into `avail` mm: (em, width factor) or None. Order: lower the width factor down to MIN_WF, then the height (em) down to MIN_EM.
+def fit_line(text: str, em0: float, avail: float, bold: bool = False):
+    """Fit of one line into `avail` mm (real Arial widths + 5 %, tcvn.cons_width): (em, width factor) or None. Order: lower the width factor down to MIN_WF, then the height (em) down to MIN_EM.
     The widths are floored (0.01 / 0.1 steps) so the result is never wider than `avail`."""
     n = len(text)
-    if n == 0 or cons_width(text, em0) <= avail:
+    if n == 0 or cons_width(text, em0, 1.0, bold) <= avail:
         return em0, 1.0
-    wf = math.floor(avail / cons_width(text, em0) * 100 + 1e-9) / 100
+    wf = math.floor(avail / cons_width(text, em0, 1.0, bold) * 100 + 1e-9) / 100
     if wf >= MIN_WF:
         return em0, wf
-    em = math.floor(avail / cons_width(text, 1.0, MIN_WF) * 10 + 1e-9) / 10
+    em = math.floor(avail / cons_width(text, 1.0, MIN_WF, bold) * 10 + 1e-9) / 10
     if em >= MIN_EM:
         return min(em, em0), MIN_WF
     return None
 
 
-def best_split(text: str):
-    """Break a string at a space into two lines, the longer line as short as possible; None when it has no space."""
+def best_split(text: str, bold: bool = False):
+    """Break a string at a space into two lines, the wider line as narrow as possible (measured width); None when it has no space."""
     words = text.split()
     best = None
     for i in range(1, len(words)):
         a, b = " ".join(words[:i]), " ".join(words[i:])
-        if best is None or max(len(a), len(b)) < best[0]:
-            best = (max(len(a), len(b)), [a, b])
+        m = max(cons_width(a, 1.0, 1.0, bold), cons_width(b, 1.0, 1.0, bold))
+        if best is None or m < best[0]:
+            best = (m, [a, b])
     return best[1] if best else None
 
 
-def _too_long(what, text, avail):
-    return (f"{what}: dòng {text!r} có {len(text)} ký tự, cần khoảng {cons_width(text, MIN_EM, MIN_WF):.0f} mm ngay cả khi co chữ tới giới hạn "
-            f"(hệ số rộng {MIN_WF:g}, cao {MIN_EM:g} mm, ước lượng thận trọng) nhưng ô chỉ rộng {avail:g} mm. Hãy rút gọn hoặc ngắt dòng bằng dấu |.")
+def _too_long(what, text, avail, bold=False):
+    return (f"{what}: dòng {text!r} có {len(text)} ký tự, cần khoảng {cons_width(text, MIN_EM, MIN_WF, bold):.0f} mm ngay cả khi co chữ tới giới hạn "
+            f"(hệ số rộng {MIN_WF:g}, cao {MIN_EM:g} mm, đo theo font Arial + 5 % dự phòng) nhưng ô chỉ rộng {avail:g} mm. Hãy rút gọn hoặc ngắt dòng bằng dấu |.")
 
 
 def _split(text, size, bold, width, max_lines, what):
     parts = [p.strip() for p in text.split("|")] if "|" in text else [text.strip()]
     if len(parts) > max_lines:
         raise SpecError([f"{what} = {text!r}: tối đa {max_lines} dòng (dấu | là ngắt dòng)."])
-    if len(parts) == 1 and fit_line(parts[0], size, width) is None and max_lines > 1:         # shrink first (width factor, height), then break into two lines
-        parts = best_split(parts[0]) or parts
+    if len(parts) == 1 and fit_line(parts[0], size, width, bold) is None and max_lines > 1:         # shrink first (width factor, height), then break into two lines
+        parts = best_split(parts[0], bold) or parts
     for p in parts:
-        if fit_line(p, size, width) is None:
-            raise SpecError([_too_long(what, p, width)])
+        if fit_line(p, size, width, bold) is None:
+            raise SpecError([_too_long(what, p, width, bold)])
     return parts
 
 
@@ -114,14 +115,14 @@ def fields_from_meta(meta: dict, scale_text: str) -> dict:
 
     def put(name, text, what):
         _, _, _, size, bold, width = FIELDS[name]
-        if not text or fit_line(text, size, width):
+        if not text or fit_line(text, size, width, bold):
             f[name] = text
             return
-        parts = best_split(text) if name in LINES2 else None                    # shrinking did not suffice: break into two lines when the cell has room
-        if parts and fit_line(max(parts, key=len), size, width):
+        parts = best_split(text, bold) if name in LINES2 else None              # shrinking did not suffice: break into two lines when the cell has room
+        if parts and all(fit_line(p, size, width, bold) for p in parts):
             f[name], f[name + "_2"] = parts
         else:
-            errs.append(f"{what} = " + _too_long("", text, width).lstrip(": "))
+            errs.append(f"{what} = " + _too_long("", text, width, bold).lstrip(": "))
 
     try:
         l = _split(meta.get("don_vi_tk", ""), 3.5, True, 86, 2, "khung_ten.don_vi_tk (ô 1)") if meta.get("don_vi_tk") else []
@@ -186,14 +187,15 @@ def layout(fields: dict) -> dict:
     out = {}
     for name, text in fields.items():
         base = name[:-2] if name.endswith("_2") and name[:-2] in LINES2 else name
-        size, width = FIELDS[name][3], FIELDS[name][5]
+        size, bold, width = FIELDS[name][3], FIELDS[name][4], FIELDS[name][5]
         if base in LINES2 and base in fields and base + "_2" in fields:
-            fit = fit_line(max(fields[base], fields[base + "_2"], key=len), size, width)
+            wider = max(fields[base], fields[base + "_2"], key=lambda t: cons_width(t, 1.0, 1.0, bold))
+            fit = fit_line(wider, size, width, bold)
             dy = LINES2[base][1 if name.endswith("_2") else 0]
         else:
-            fit, dy = fit_line(text, size, width), FIELDS[name][2]
+            fit, dy = fit_line(text, size, width, bold), FIELDS[name][2]
         if fit is None:
-            raise SpecError([_too_long(f"khung tên, ô {name}", text, width)])
+            raise SpecError([_too_long(f"khung tên, ô {name}", text, width, bold)])
         out[name] = dict(em=fit[0], wf=fit[1], dy=dy)
     return out
 

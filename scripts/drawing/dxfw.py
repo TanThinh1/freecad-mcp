@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import math
 
+from fontmetrics import text_em
+from tcvn import ARIAL_CAP
+
 
 def esc(s: str) -> str:
     out = []
@@ -83,10 +86,23 @@ class Dxf:
     def rect(self, layer, x0, y0, x1, y1):
         self.lwpolyline(layer, [(x0, y0), (x1, y0), (x1, y1), (x0, y1)], closed=True)
 
+    def text_width(self, s, height, style="STANDARD", wf=1.0) -> float:
+        """Width of the string in drawing units: Arial advance widths (the file named by the style: arialbd.ttf = bold) at em = height / cap-height ratio, times the width factor."""
+        font = self.styles.get(style, "arial.ttf").lower()
+        return text_em(s, bold="bd" in font or "bold" in font) * (height / ARIAL_CAP) * wf
+
     def text(self, layer, s, pos, height, rot=0.0, style="STANDARD", halign="left", wf=1.0):
-        self._grow(pos)
+        """TEXT. `pos` is the anchor the caller means (left, centre or right end of the baseline). For centre / right alignment code 11 (alignment point) is `pos`
+        and code 10 is written as the REAL left end of the baseline (pos - width/2 or pos - width, along the text direction): readers that place the text from
+        code 10 (DWG files converted by ODA, as drawn by ZWCAD) then agree with readers that use code 11."""
         hj = {"left": 0, "center": 1, "right": 2}[halign]
-        sub = [(100, "AcDbText"), (10, pos[0]), (20, pos[1]), (30, 0.0), (40, height), (1, self._e(s)), (50, rot)]
+        ins = pos
+        if hj:
+            w = self.text_width(s, height, style, wf) * (0.5 if hj == 1 else 1.0)
+            phi = math.radians(rot)
+            ins = (pos[0] - w * math.cos(phi), pos[1] - w * math.sin(phi))
+        self._grow(pos, ins)
+        sub = [(100, "AcDbText"), (10, ins[0]), (20, ins[1]), (30, 0.0), (40, height), (1, self._e(s)), (50, rot)]
         if abs(wf - 1.0) > 1e-9:
             sub.append((41, float(wf)))                    # relative X scale (width factor)
         sub.append((7, style))
