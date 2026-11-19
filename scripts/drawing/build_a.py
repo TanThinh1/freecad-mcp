@@ -98,6 +98,8 @@ def section_block(sp: dict, s: int):
     else:
         low0 = ((o - h) * b / h, 0.0)
     add(Line(layer=LAYER_STRINGER, tag="stringer_low", p1=(X(low0[0]), X(low0[1])), p2=(X(L), X(H - o - shift))))
+    if low0[0] > 1e-6:                       # lower edge cut at the floor (stringer deeper than one riser): the bottom of the strip along the floor closes it at the foot of riser 1
+        add(Line(layer=LAYER_STRINGER, tag="stringer_foot", p1=(0.0, 0.0), p2=(X(low0[0]), 0.0)))
     if o > h and H - o < (n - 1) * h:
         add(Line(layer=LAYER_STRINGER, tag="stringer_end", p1=(X(L), X(H - o)), p2=(X(L), X((n - 1) * h))))
     # stringer section label with a leader pointing at the lower edge of the stringer (free space below the stair); text size = the existing note size

@@ -127,6 +127,7 @@ def check_primitives_a(C: Checks, D, sp):
     check_dam_label(C, D, sp)
     check_stringer_covers_a(C, D, sp)
     check_steps_inside_a(C, D, sp)
+    check_stringer_foot_a(C, D, sp)
     segs = [(g.p1, g.p2) for g in D.prims if isinstance(g, Line) and not g.sheet and not g.tag.startswith("dim_")]
     for r_ in (p for p in D.prims if isinstance(p, Rect) and not p.sheet):
         (ax_, ay_), (bx_, by_) = r_.p0, r_.p1
@@ -220,6 +221,43 @@ def check_steps_inside_a(C: Checks, D, sp):
         C.info(1, "1.25", "bậc nằm trọn trong dải dầm cốn (dầm quá nông: không phải lỗi, chỉ cảnh báo)", f"{msg}; đo: mũi nhô {wn:.3f} mm, chân nhô {max(wf, 0.0):.3f} mm")
 
 
+def _foot_gap(low, floor_segs, tol=1e-6):
+    """Closure of the strip at the foot. `low` = ((x1, z1), (x2, z2)) lower edge in real mm; `floor_segs` = horizontal NET-CHINH segments ((xa, za), (xb, zb)) on z = 0.
+    When the lower edge is cut at the floor (it starts on z = 0 at x0 > tol) the interval [0, x0] of the floor line must be drawn (the bottom of the strip, between the foot of
+    riser 1 and the start of the lower edge): returns (cut, uncovered length in mm). Not cut (the lower edge starts at the foot of riser 1): (False, 0)."""
+    p = min(low, key=lambda q: q[0])
+    x0 = p[0]
+    if abs(p[1]) > tol or x0 <= tol:
+        return False, 0.0
+    iv = sorted((max(0.0, min(a[0], b[0])), min(x0, max(a[0], b[0]))) for a, b in floor_segs if abs(a[1]) <= tol and abs(b[1]) <= tol and max(a[0], b[0]) > 0 and min(a[0], b[0]) < x0)
+    return True, _uncovered(iv, x0)
+
+
+def _uncovered(iv, x0):
+    pos, gap = 0.0, 0.0
+    for lo, hi in iv:
+        if lo > pos:
+            gap += lo - pos
+        pos = max(pos, hi)
+    return gap + max(0.0, x0 - pos)
+
+
+def check_stringer_foot_a(C: Checks, D, sp):
+    """1.26: when the lower edge of the stringer is cut at the floor, the strip is closed at the foot: the floor line from the foot of riser 1 (0, 0) to the start of the lower edge is drawn
+    (gap <= 1e-6 mm). A stringer that is not cut (o <= h) needs no bottom line."""
+    s = D.view_scale("section")
+    ox, oy = D.meta["section_origin"]
+    R = lambda p: ((p[0] - ox) * s, (p[1] - oy) * s)
+    low = [p for p in D.prims if p.tag == "stringer_low"]
+    floor = [(R(p.p1), R(p.p2)) for p in D.prims if isinstance(p, Line) and not p.sheet and p.layer == "NET-CHINH" and abs(R(p.p1)[1]) < 1e-6 and abs(R(p.p2)[1]) < 1e-6]
+    if len(low) != 1:
+        C.add(1, "1.26", "dải dầm khép kín ở chân", False, "không có đúng một mép dưới dầm cốn")
+        return
+    cut, gap = _foot_gap((R(low[0].p1), R(low[0].p2)), floor)
+    C.add(1, "1.26", "dải dầm khép kín ở chân: khi mép dưới dầm bị cắt tại sàn z = 0, nét đáy nối chân nét đứng bậc 1 với đầu mép dưới (khe hở ≤ 1e-6 mm); dầm không bị cắt thì không cần nét đáy", gap <= 1e-6,
+          f"mép dưới {'bị cắt tại sàn, đầu mép dưới ở x = %.3f mm' % min(R(low[0].p1)[0], R(low[0].p2)[0]) if cut else 'bắt đầu đúng chân bậc 1 (không cắt tại sàn)'}; khe hở {gap:.6f} mm")
+
+
 def check_stringer_covers_a(C: Checks, D, sp):
     """1.24: the stringer strip (top and lower edge of the primitives) covers every inner corner (foot of each riser) of the saw-tooth: no corner sticks out below the lower edge."""
     s = D.view_scale("section")
@@ -237,7 +275,7 @@ def check_stringer_covers_a(C: Checks, D, sp):
     C.add(1, "1.24", "dầm cốn che hết góc trong (chân bậc) của răng cưa: mọi chân bậc ((i−1)b, (i−1)h) nằm trong dải giữa mép dưới và mép trên dầm", ok, detail)
 
 
-SECTION_TAGS = {"floor_lower", "floor_upper", "riser", "tread", "stringer_top", "stringer_low", "stringer_end", "level_line", "level_tri", "level_bar", "level_text",
+SECTION_TAGS = {"floor_lower", "floor_upper", "riser", "tread", "stringer_top", "stringer_low", "stringer_end", "stringer_foot", "level_line", "level_tri", "level_bar", "level_text",
                 "angle_text", "title_section", "note", "dam_label", "dam_leader"}
 
 
@@ -512,6 +550,14 @@ def check_dxf_a(C: Checks, D, sp, dx):
         ok15 = not bad
         d15 = f"{n} chân bậc; lòi ra khỏi dầm lớn nhất {worst:.3f} mm; chân lòi ra: {bad[:3]}"
     C.add(2, "2.15", "DXF (mm thật): hai mép dầm cốn che hết mọi chân bậc ((i−1)b, (i−1)h): không chân nào lòi ra dưới mép dưới hoặc trên mép trên", ok15, d15)
+    # 2.17: strip closed at the foot (real mm): when the lower edge is cut at the floor, the floor line from (0, 0) to the start of the lower edge is drawn
+    if len(slope) == 2:
+        floor17 = [g for g in st if abs(g[0][1]) <= 1e-6 and abs(g[1][1]) <= 1e-6]
+        cut17, gap17 = _foot_gap(ends[1], floor17)
+        C.add(2, "2.17", "DXF (mm thật): dải dầm khép kín ở chân: khi mép dưới bị cắt tại sàn z = 0, nét đáy NET-CHINH nối (0, 0) với đầu mép dưới (khe hở ≤ 1e-6 mm)", gap17 <= 1e-6,
+              f"mép dưới {'bị cắt tại sàn ở x = %.3f mm' % min(ends[1][0][0], ends[1][1][0]) if cut17 else 'bắt đầu đúng chân bậc 1'}; khe hở {gap17:.6f} mm")
+    else:
+        C.add(2, "2.17", "DXF (mm thật): dải dầm khép kín ở chân", False, f"{len(slope)} đoạn dầm cốn nghiêng trên NET-CHINH (cần 2)")
     # 2.16: the whole saw-tooth (nosings and feet) inside the strip, real mm; a stringer shallower than one riser only gives INFO (see 1.25)
     deep16, msg16 = _shallow_info(sp)
     if len(slope) == 2:

@@ -334,6 +334,29 @@ def main():
     expect("stringer_much_shallower_than_h_passes_everything_1.25_info", not bad_sh and D_sh.meta["stringer_shift"] > 100.0 and item(D_sh, sp_sh, "1.25")["ok"] is None, f"hạ {D_sh.meta['stringer_shift']:.2f} mm; không đạt: {sorted(bad_sh)}")
     need({"1.24"}, prim_check(mut(move_stringer(120.0, ("stringer_low",)), D_gt), sp_gt), "prim_stringer_o_gt_h_lower_edge_raised_120mm")
     expect("stringer_o_gt_h_lower_edge_raised_1mm_still_covers", not (prim_check(mut(move_stringer(1.0, ("stringer_low",)), D_gt), sp_gt) & {"1.24"}), "mép dưới nâng 1 mm vẫn che chân bậc (còn dư)")
+    # (14) strip closed at the foot: a lower edge cut at the floor needs the bottom line from (0, 0) to the start of the lower edge (1.26 / 2.17); a stringer that is not cut needs none
+    def foot_prims(Dx):
+        return [q for q in Dx.prims if q.tag == "stringer_foot"]
+    f1 = foot_prims(D1)
+    expect("control_default_stringer_has_one_bottom_line_from_the_foot_of_riser_1_to_the_cut", len(f1) == 1 and f1[0].layer == "NET-CHINH" and item(D1, sp1, "1.26")["ok"] is True
+           and abs((f1[0].p2[0] - f1[0].p1[0]) * D1.view_scale("section") - (o1 - sp1["h"]) * sp1["b"] / sp1["h"]) < 1e-6,
+           f"{len(f1)} nét đáy dài {(f1[0].p2[0] - f1[0].p1[0]) * D1.view_scale('section'):.3f} mm thật (cần (o − h)·b/h = {(o1 - sp1['h']) * sp1['b'] / sp1['h']:.3f})" if f1 else "không có nét đáy")
+
+    def drop_foot(Dm):
+        Dm.prims.remove(foot_prims(Dm)[0])
+
+    def shorten_foot(dx_real):
+        def fn(Dm):
+            f_ = foot_prims(Dm)[0]
+            f_.p2 = (f_.p2[0] - dx_real / Dm.view_scale("section"), f_.p2[1])
+        return fn
+    need({"1.26"}, prim_check(mut(drop_foot), sp1), "prim_1.26_bottom_line_missing")
+    need({"1.26"}, prim_check(mut(shorten_foot(1.0)), sp1), "prim_1.26_bottom_line_1mm_too_short")
+    need({"1.26"}, prim_check(mut(drop_foot, D_gt), sp_gt), "prim_1.26_bottom_line_missing_H60x200")
+    expect("prim_1.26_bottom_line_shorter_by_1e-8_mm_still_passes", "1.26" not in prim_check(mut(shorten_foot(1e-8)), sp1), "khe hở 1e-8 mm nằm trong ngưỡng 1e-6")
+    expect("stringer_not_cut_at_the_floor_needs_no_bottom_line_1.26_passes", not foot_prims(D_s) and not foot_prims(D_eq) and item(D_s, sp_s, "1.26")["ok"] is True and item(D_eq, sp_eq, "1.26")["ok"] is True
+           and item(D_s, sp_s, "1.26")["detail"].count("không cắt") == 1 and len(foot_prims(D_gt)) == 1 and item(D_gt, sp_gt, "1.26")["ok"] is True,
+           f"nông: {len(foot_prims(D_s))} nét đáy; o = h: {len(foot_prims(D_eq))}; H60x200: {len(foot_prims(D_gt))}")
     # (11) item 4: clear gap between step numbers and lines
     def steps_back_inside_cells(Dm):                  # the old layout: numbers between the tread lines (0.4-0.9 mm from them at 1:50)
         r_ = [p for p in Dm.prims if p.tag == "plan_outline"][0]
@@ -404,6 +427,9 @@ def main():
     need({"2.15", "2.7"}, dxf_expect(mut(move_stringer(1.0, ("stringer_low",)), D_s), sp_s, D_s, "dxf_shallow_low_raised_1mm"), "dxf_shallow_stringer_low_raised_1mm_corners_stick_out")
     need({"2.15", "2.7"}, dxf_expect(mut(move_stringer(shift_s), D_s), sp_s, D_s, "dxf_shallow_old_position"), "dxf_shallow_stringer_back_at_the_old_position")
     expect("dxf_2.16_top_edge_raised_1mm_still_passes", "2.16" not in dxf_of(mut(move_stringer(1.0, ("stringer_top",))), "dxf_top_edge_raised_1mm"), "mép trên cao thêm 1 mm vẫn chứa mũi bậc")
+    need({"2.17"}, dxf_of(mut(drop_foot), "dxf_bottom_line_missing"), "dxf_2.17_bottom_line_missing")
+    need({"2.17"}, dxf_of(mut(shorten_foot(1.0)), "dxf_bottom_line_1mm_too_short"), "dxf_2.17_bottom_line_1mm_too_short")
+    expect("dxf_2.17_shallow_and_o_equals_h_need_no_bottom_line", "2.17" not in dxf_expect(D_s, sp_s, D_s, "dxf_shallow_ok") and "2.17" not in dxf_expect(D_eq, sp_eq, D_eq, "dxf_eq_ok"), "không cần nét đáy khi dầm không bị cắt tại sàn")
     need({"2.7", "2.9"}, dxf_of(mut(wrong_b), "dxf_wrong_b"), "dxf_wrong_b_tread")
     need({"2.7", "2.9"}, dxf_of(mut(wrong_level), "dxf_wrong_level"), "dxf_level_line_off")
     need({"2.6", "2.8", "2.9"}, dxf_of(mut(wrong_note), "dxf_wrong_note"), "dxf_note_text_wrong")
