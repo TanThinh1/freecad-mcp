@@ -1,4 +1,4 @@
-"""Technical-drawing tools (type A stair, B grid + columns, C portal-frame cross-section) on top of scripts/drawing.
+"""Technical-drawing tools (type A stair, B grid + columns, C portal-frame cross-section, D purlin plan) on top of scripts/drawing.
 
 The drawing pipeline (make_drawing / verify) is NOT reimplemented here: every call runs the scripts as a separate Python process, so a crash or
 a slow FreeCAD export never blocks the MCP server. Files are written only below <repo>/out/ (spec copies and logs in out/_jobs/<job_id>/, results in
@@ -23,7 +23,7 @@ REPO = Path(__file__).resolve().parents[2]
 DRAW = REPO / "scripts" / "drawing"
 OUT = REPO / "out"
 JOBS = OUT / "_jobs"
-LOAI = ("thang", "luoi_cot", "khung_ngang")
+LOAI = ("thang", "luoi_cot", "khung_ngang", "xa_go")
 JOB_TIMEOUT = 900          # seconds; a drawing normally needs 30-60 s
 CLI_TIMEOUT = 30
 MAX_PNG_BYTES = 1_500_000
@@ -95,7 +95,7 @@ def _run_cli(args: list[str], freecadcmd: list[str] | None = None) -> dict:
 def _check_loai(loai) -> str | None:
     if not isinstance(loai, str) or loai not in LOAI:
         shown = loai if isinstance(loai, str) and len(loai) <= 40 else type(loai).__name__
-        return f"loai = {shown!r} không hợp lệ. Dùng một trong: thang, luoi_cot, khung_ngang."
+        return f"loai = {shown!r} không hợp lệ. Dùng một trong: thang, luoi_cot, khung_ngang, xa_go."
     return None
 
 

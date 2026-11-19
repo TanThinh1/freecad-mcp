@@ -94,9 +94,9 @@ mcp = FastMCP(
     "FreeCADMCP",
     instructions=(
         "FreeCAD integration through the Model Context Protocol.\n\n"
-        "BẢN VẼ KỸ THUẬT TCVN (cầu thang thép / lưới trục và cột / khung ngang) - khi khách nói bằng lời, làm đúng quy trình sau, trả lời bằng tiếng Việt:\n"
-        "1. Xác định loại: thang (cầu thang thép một vế), luoi_cot (mặt bằng lưới trục và cột), khung_ngang (mặt cắt ngang khung). Chưa rõ tham số thì gọi huong_dan_ve(loai).\n"
-        "2. Số BẮT BUỘC: thang = cao_tang, so_bac, be_rong_ve; luoi_cot = nhip, dai_nha, buoc_cot; khung_ngang = nhip, cao_cot, do_doc_mai, so_mai. "
+        "BẢN VẼ KỸ THUẬT TCVN (cầu thang thép / lưới trục và cột / khung ngang / mặt bằng xà gồ) - khi khách nói bằng lời, làm đúng quy trình sau, trả lời bằng tiếng Việt:\n"
+        "1. Xác định loại: thang (cầu thang thép một vế), luoi_cot (mặt bằng lưới trục và cột), khung_ngang (mặt cắt ngang khung), xa_go (mặt bằng xà gồ mái). Chưa rõ tham số thì gọi huong_dan_ve(loai).\n"
+        "2. Số BẮT BUỘC: thang = cao_tang, so_bac, be_rong_ve; luoi_cot = nhip, dai_nha, buoc_cot; khung_ngang = nhip, cao_cot, do_doc_mai, so_mai; xa_go = nhip, dai_nha, buoc_cot, do_doc_mai, so_mai, buoc_xa_go. "
         "Thiếu số nào thì HỎI LẠI khách số đó, KHÔNG tự bịa hay suy đoán.\n"
         "3. Số PHỤ (tiết diện, bề rộng mặt bậc, dầm cốn, bề dày tấm, tỷ lệ \"auto\", khung tên): dùng giá trị mặc định của công cụ và NÓI RÕ đã dùng giá trị nào "
         "(kiem_tra_spec trả danh sách da_dung_mac_dinh). Khung tên: lấy từ lời khách nếu có, không thì dùng tên mẫu; không bao giờ bịa họ tên người ký.\n"
@@ -885,8 +885,8 @@ def huong_dan_ve(ctx: Context, loai: Any) -> list[TextContent]:
     Số bắt buộc thiếu thì phải HỎI LẠI khách, không tự bịa; số phụ dùng mặc định và nói rõ đã dùng giá trị nào.
 
     Args:
-        loai: "thang" (cầu thang thép một vế: mặt bằng + mặt cắt dọc 1-1), "luoi_cot" (mặt bằng lưới trục và cột nhà thép)
-            hoặc "khung_ngang" (mặt cắt ngang khung thép: cột, kèo, cao độ).
+        loai: "thang" (cầu thang thép một vế: mặt bằng + mặt cắt dọc 1-1), "luoi_cot" (mặt bằng lưới trục và cột nhà thép),
+            "khung_ngang" (mặt cắt ngang khung thép: cột, kèo, cao độ) hoặc "xa_go" (mặt bằng xà gồ mái: xà gồ, khoảng cách, số lượng).
     """
     return _ban_ve_response(ban_ve.huong_dan(loai))
 
@@ -900,7 +900,7 @@ def kiem_tra_spec(ctx: Context, loai: Any, spec: Any) -> list[TextContent]:
     thieu_bat_buoc: HỎI LẠI khách. LUÔN gọi trước ve_ban_ve, trình bày kết quả cho khách và CHỜ khách đồng ý (OK) mới vẽ.
 
     Args:
-        loai: "thang", "luoi_cot" hoặc "khung_ngang" (xem huong_dan_ve).
+        loai: "thang", "luoi_cot", "khung_ngang" hoặc "xa_go" (xem huong_dan_ve).
         spec: đối tượng JSON các tham số của loại đó (không cần "ten", hệ thống tự sinh).
     """
     return _ban_ve_response(ban_ve.kiem_tra(loai, spec, state.freecadcmd))
@@ -914,7 +914,7 @@ def ve_ban_ve(ctx: Context, loai: Any, spec: Any) -> list[TextContent]:
     Kết quả ghi vào out/<ten>/ trong thư mục fork. Spec sai sẽ trả lỗi tiếng Việt ngay, không dựng.
 
     Args:
-        loai: "thang", "luoi_cot" hoặc "khung_ngang".
+        loai: "thang", "luoi_cot", "khung_ngang" hoặc "xa_go".
         spec: đối tượng JSON các tham số (xem huong_dan_ve).
     """
     return _ban_ve_response(ban_ve.ve(loai, spec, state.freecadcmd))

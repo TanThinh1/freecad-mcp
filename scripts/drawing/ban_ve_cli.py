@@ -1,6 +1,6 @@
 """Command line used by the MCP tools (src/freecad_mcp/ban_ve.py): guide / check one drawing spec. Prints ONE JSON object on stdout (UTF-8).
 
-    python ban_ve_cli.py guide <thang|luoi_cot|khung_ngang>
+    python ban_ve_cli.py guide <thang|luoi_cot|khung_ngang|xa_go>
     python ban_ve_cli.py check <loai> <spec.json> [--write-spec normalized.json]
 
 `check` validates the spec with the same code as make_drawing, builds the primitives (no FreeCAD, no files except --write-spec) and reports the chosen
@@ -17,27 +17,32 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-LOAI = {"thang": "A", "luoi_cot": "B", "khung_ngang": "C"}
-EXAMPLE = {"thang": "a1_3600x20.json", "luoi_cot": "b2_12000x30000.json", "khung_ngang": "c1_12000x6000.json"}
+LOAI = {"thang": "A", "luoi_cot": "B", "khung_ngang": "C", "xa_go": "D"}
+EXAMPLE = {"thang": "a1_3600x20.json", "luoi_cot": "b2_12000x30000.json", "khung_ngang": "c1_12000x6000.json", "xa_go": "d1_12000x30000_2mai.json"}
 MAX_SPEC_BYTES = 20000
 
 KHOA_HOP_LE = {
     "thang": {"cao_tang", "so_bac", "be_rong_mat_bac", "be_rong_ve", "chieu_day_tam", "dam_con", "ty_le", "bo_cuc", "ty_le_rieng", "khung_ten", "tham_so"},
     "luoi_cot": {"nhip", "dai_nha", "buoc_cot", "tiet_dien_cot", "ty_le", "kho_giay", "gom_nhan_tiet_dien", "khung_ten", "tham_so"},
     "khung_ngang": {"nhip", "cao_cot", "do_doc_mai", "so_mai", "tiet_dien_cot", "tiet_dien_keo", "ve_truc_cau_kien", "ty_le", "kho_giay", "khung_ten", "tham_so"},
+    "xa_go": {"nhip", "dai_nha", "buoc_cot", "do_doc_mai", "so_mai", "buoc_xa_go", "tiet_dien_cot", "tiet_dien_xa_go", "ty_le", "kho_giay", "khung_ten", "tham_so"},
 }
 # Mandatory numbers per type: when one is missing the answer is "ask the customer", never a guess.
-BAT_BUOC = {"thang": ("cao_tang", "so_bac", "be_rong_ve"), "luoi_cot": ("nhip", "dai_nha", "buoc_cot"), "khung_ngang": ("nhip", "cao_cot", "do_doc_mai", "so_mai")}
+BAT_BUOC = {"thang": ("cao_tang", "so_bac", "be_rong_ve"), "luoi_cot": ("nhip", "dai_nha", "buoc_cot"), "khung_ngang": ("nhip", "cao_cot", "do_doc_mai", "so_mai"),
+           "xa_go": ("nhip", "dai_nha", "buoc_cot", "do_doc_mai", "so_mai", "buoc_xa_go")}
 # Secondary values used when the spec omits them (the answer lists every default that was applied so the assistant can tell the customer).
 # These are tool defaults taken from the examples, NOT values verified from a standard.
 MAC_DINH = {
     "thang": {"be_rong_mat_bac": (250, "bước bậc b"), "dam_con": ("H75x150x2", "dầm cốn hộp rộng x cao x dày thành, mm"), "chieu_day_tam": (3, "mm, thép tấm mặt bậc"), "ty_le": ("auto", "tỷ lệ tự chọn")},
     "luoi_cot": {"tiet_dien_cot": ("H250x125x6x9", "tiết diện cột"), "ty_le": ("auto", "tỷ lệ tự chọn")},
     "khung_ngang": {"tiet_dien_cot": ("H250x125x6x9", "tiết diện cột"), "tiet_dien_keo": ("H250x125x6x9", "tiết diện kèo"), "ty_le": ("auto", "tỷ lệ tự chọn")},
+    "xa_go": {"ty_le": ("auto", "tỷ lệ tự chọn")},
 }
+# Type D applies these two itself (spec_d.validate) so that the drawing can print the word MẶC ĐỊNH next to the purlin section; they are only REPORTED here, never written into the spec.
+MAC_DINH_D = {"tiet_dien_cot": ("H250x125x6x9", "tiết diện cột"), "tiet_dien_xa_go": ("C150x50x20x2.0", "tiết diện xà gồ (bản vẽ ghi rõ MẶC ĐỊNH)")}
 # Title-block sample used when the customer gives no names (fictional placeholder text, as in the example specs).
 KHUNG_TEN_MAU = {"don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP", "chu_dau_tu": "CÔNG TY TNHH THƯƠNG MẠI ABC", "loai_ho_so": "BVTC"}
-CONG_TRINH_MAU = {"thang": "CẦU THANG THÉP", "luoi_cot": "NHÀ KHO TIỀN CHẾ", "khung_ngang": "NHÀ XƯỞNG KHUNG THÉP"}
+CONG_TRINH_MAU = {"thang": "CẦU THANG THÉP", "luoi_cot": "NHÀ KHO TIỀN CHẾ", "khung_ngang": "NHÀ XƯỞNG KHUNG THÉP", "xa_go": "NHÀ XƯỞNG KHUNG THÉP"}
 
 KHUNG_TEN = ("khung_ten (tùy chọn): {don_vi_tk, cong_trinh, chu_dau_tu, ten_ban_ve, ky_hieu_ban_ve, loai_ho_so, ngay (dd/mm/yyyy), o15, "
              "ky: [{chuc_danh, ho_ten}], chu_tri / kiem_tra / thiet_ke (true = chỉ in nhãn chức danh ở ô 8-14; chuỗi = họ tên do người dùng cung cấp). MẶC ĐỊNH khi spec không nói gì: "
@@ -110,6 +115,29 @@ GUIDE = {
             "nhip, cao_cot > 0; do_doc_mai trong (0, 100]; so_mai thuộc {1, 2}; tiết diện đọc được, ngược lại báo lỗi kèm giá trị sai.",
             "Cao đỉnh không nguyên mm (vd 13,3%): hình vẽ dùng giá trị chính xác, chữ hiển thị làm tròn nửa lên đến mm và có CẢNH BÁO nêu giá trị chính xác.",
         ]),
+    "xa_go": dict(
+        mo_ta="Mặt bằng xà gồ mái của nhà thép một nhịp (KC-04): lưới trục + cột như luoi_cot, các xà gồ chiếu lên mặt bằng (lớp XA-GO), chuỗi kích thước khoảng cách xà gồ theo phương chiếu, ghi chú tiết diện / số lượng / khoảng cách thực. Không có hình 3D.",
+        tham_so=[
+            dict(ten="nhip", don_vi="mm", bat_buoc=True, mo_ta="khoảng cách hai trục A và B, số nguyên > 0"),
+            dict(ten="dai_nha", don_vi="mm", bat_buoc=True, mo_ta="chiều dài nhà; phải chia hết cho buoc_cot (không tự làm tròn)"),
+            dict(ten="buoc_cot", don_vi="mm", bat_buoc=True, mo_ta="bước cột; số trục dọc N = dai_nha/buoc_cot + 1 (tối đa 100)"),
+            dict(ten="do_doc_mai", don_vi="%", bat_buoc=True, mo_ta="độ dốc mái, 0 < i ≤ 100 (cho phép số lẻ như 13.3)"),
+            dict(ten="so_mai", bat_buoc=True, mo_ta="1 hoặc 2. 2 mái: tim nóc ở giữa nhịp (xà gồ nóc của hai mái trùng nhau trên mặt bằng, vẽ một đường). 1 mái: dốc từ trục A (thấp) lên trục B (cao)"),
+            dict(ten="buoc_xa_go", don_vi="mm", bat_buoc=True, mo_ta="khoảng cách TỐI ĐA giữa các xà gồ, đo dọc theo mặt dốc; số nguyên > 0, không lớn hơn chiều dài mặt dốc của một mái. Ngoài 800-2000 mm thì có cảnh báo mềm (kinh nghiệm thực tế, KHÔNG phải điều khoản TCVN)"),
+            dict(ten="tiet_dien_cot", bat_buoc=False, mac_dinh="H250x125x6x9", mo_ta="\"H300x150x6x9\" (h x b x tw x tf) hoặc hộp \"100x50x2\", mm"),
+            dict(ten="tiet_dien_xa_go", bat_buoc=False, mac_dinh="C150x50x20x2.0", mo_ta="\"C150x50x20x2.0\" = h x b x môi x dày (mm); khi khách không nêu, bản vẽ ghi rõ \"(MẶC ĐỊNH)\" cạnh tiết diện"),
+            dict(ten="kho_giay", bat_buoc=False, mac_dinh="auto", mo_ta="\"auto\": ưu tiên A3, chỉ dùng A2 rồi A1 khi A3 không vừa ở tỷ lệ ≤ 1:200; hoặc ép \"A3\" | \"A2\" | \"A1\""),
+            dict(ten="ty_le", bat_buoc=False, mac_dinh="auto", mo_ta="xem quy tắc chung"),
+            dict(ten="khung_ten", bat_buoc=False, mo_ta=KHUNG_TEN + " Với xa_go: ky_hieu_ban_ve mặc định KC-04."),
+            dict(ten="tham_so", bat_buoc=False, mo_ta="ghi đè tham số bố cục (mm trên giấy), như luoi_cot"),
+        ],
+        quy_tac=COMMON_RULES[1:] + [
+            "SỐ BẮT BUỘC của xa_go (thiếu thì HỎI LẠI khách): nhip, dai_nha, buoc_cot, do_doc_mai, so_mai, buoc_xa_go.",
+            "L = chiều dài mặt dốc một mái = (nhịp/2 hoặc nhịp) × √(1 + i²); n = số khoảng = làm tròn lên của L / buoc_xa_go; khoảng thực = L / n; mỗi mái có n + 1 xà gồ. Trên mặt bằng, xà gồ thứ k cách trục A k × (nhịp/2 hoặc nhịp) / n (= khoảng thực × cosθ).",
+            "dai_nha không chia hết cho buoc_cot, buoc_xa_go lớn hơn chiều dài mặt dốc, so_mai ngoài {1, 2} → báo lỗi tiếng Việt kèm giá trị sai và gợi ý.",
+            "Khoảng cách chiếu không nguyên mm (vd nhịp/2 chia n): nhãn kích thước làm tròn nửa lên đến mm và có CẢNH BÁO nêu giá trị chính xác; ghi chú trên bản vẽ nêu giá trị 1 chữ số thập phân.",
+            "Nhãn khoảng cách xà gồ phải nằm gọn giữa hai mũi tên: tỷ lệ nào không đủ chỗ bị loại (ví dụ nhà lớn với xà gồ dày không vẽ được ở 1:200), khi đó lên khổ lớn hơn hoặc báo lỗi kèm lý do.",
+        ]),
 }
 
 
@@ -134,6 +162,8 @@ def auto_name(loai: str, spec: dict) -> str:
         name = f"thang_{_num_name(g('cao_tang'))}x{_num_name(g('so_bac'))}"
     elif loai == "luoi_cot":
         name = f"luoi_cot_{_num_name(g('nhip'))}x{_num_name(g('dai_nha'))}_{_num_name(g('buoc_cot'))}"
+    elif loai == "xa_go":
+        name = f"xa_go_{_num_name(g('nhip'))}x{_num_name(g('dai_nha'))}_{_num_name(g('buoc_cot'))}_{_num_name(g('buoc_xa_go'))}"
     else:
         name = f"khung_ngang_{_num_name(g('nhip'))}x{_num_name(g('cao_cot'))}_{_num_name(g('do_doc_mai'))}pct_{_num_name(g('so_mai'))}mai"
     return re.sub(r"[^A-Za-z0-9_-]", "_", name)[:64]
@@ -141,11 +171,12 @@ def auto_name(loai: str, spec: dict) -> str:
 
 def guide(loai: str):
     if loai not in GUIDE:
-        return dict(hop_le=False, loi=[f"loai = {loai!r} không hợp lệ. Dùng một trong: thang, luoi_cot, khung_ngang."])
+        return dict(hop_le=False, loi=[f"loai = {loai!r} không hợp lệ. Dùng một trong: thang, luoi_cot, khung_ngang, xa_go."])
     import spec_a
     import spec_b
     import spec_c
-    defaults = {"thang": spec_a.DEFAULT_PARAMS_A, "luoi_cot": spec_b.DEFAULT_PARAMS, "khung_ngang": spec_c.DEFAULT_PARAMS_C}[loai]
+    import spec_d
+    defaults = {"thang": spec_a.DEFAULT_PARAMS_A, "luoi_cot": spec_b.DEFAULT_PARAMS, "khung_ngang": spec_c.DEFAULT_PARAMS_C, "xa_go": spec_d.DEFAULT_PARAMS_D}[loai]
     ex = json.load(open(os.path.join(HERE, "examples", EXAMPLE[loai]), encoding="utf-8-sig"))
     ex.pop("ten", None)                  # generated
     ex.pop("loai", None)                 # set from the tool argument
@@ -156,18 +187,22 @@ def guide(loai: str):
 
 def _derived(loai, sp, D):
     import spec_c
+    import spec_d
     if loai == "thang":
         return dict(chieu_cao_bac_h_mm=sp["h"], chieu_cao_bac_dang_so=(f"{sp['cao_tang'] / sp['so_bac']:.4f}"), so_mat_bac=sp["n_treads"], chieu_dai_ve_mm=sp["L"],
                     goc_doc_do=round(sp["theta_deg"], 2), hai_h_cong_b_mm=round(sp["two_h_b"], 1))
     if loai == "luoi_cot":
         return dict(so_truc_doc_N=sp["so_truc_doc"], so_cot=2 * sp["so_truc_doc"], buoc_cot_mm=sp["buoc_cot"], dai_nha_mm=sp["dai_nha"], nhip_mm=sp["nhip"])
+    if loai == "xa_go":
+        return dict(so_truc_doc_N=sp["so_truc_doc"], so_cot=2 * sp["so_truc_doc"], chieu_dai_mat_doc_mm=round(sp["L"], 1), so_khoang_n=sp["n"], so_xa_go_moi_mai=sp["n"] + 1, tong_so_xa_go=sp["n_purlins_total"],
+                    khoang_cach_thuc_mm=sp["real_spacing_text"], khoang_cach_chieu_mm=spec_d.fmt_len(sp["proj_spacing"]), goc_doc_do=round(sp["theta_deg"], 2), so_mai=sp["so_mai"])
     return dict(cao_dinh_mm=sp["y_top"], cao_dinh_chinh_xac=spec_c.fmt_exact(sp["y_top_exact"]),
                 khoang_nho_mm=sp["rise"], goc_doc_do=round(sp["theta_deg"], 2), chieu_dai_keo_truc_mm=round(sp["raf_len"], 1), so_mai=sp["so_mai"])
 
 
 def check(loai: str, spec_path: str, write_spec: str | None, profile: str | None):
     if loai not in LOAI:
-        return dict(hop_le=False, loi=[f"loai = {loai!r} không hợp lệ. Dùng một trong: thang, luoi_cot, khung_ngang."])
+        return dict(hop_le=False, loi=[f"loai = {loai!r} không hợp lệ. Dùng một trong: thang, luoi_cot, khung_ngang, xa_go."])
     try:
         if os.path.getsize(spec_path) > MAX_SPEC_BYTES:
             return dict(hop_le=False, loai=loai, loi=[f"spec quá lớn (> {MAX_SPEC_BYTES} byte)."])
@@ -203,6 +238,8 @@ def check(loai: str, spec_path: str, write_spec: str | None, profile: str | None
         if spec.get(key) is None:
             spec[key] = val
             da_dung.append(dict(ten=key, gia_tri=val, y_nghia=note))
+    if k == "D":
+        da_dung.extend(dict(ten=key, gia_tri=val, y_nghia=note) for key, (val, note) in MAC_DINH_D.items() if spec.get(key) is None)
     kt_in = spec.get("khung_ten")
     if not kt_in:
         import datetime
@@ -216,12 +253,14 @@ def check(loai: str, spec_path: str, write_spec: str | None, profile: str | None
     import build_a
     import build_b
     import build_c
+    import build_d
     import spec_a
     import spec_b
     import spec_c
+    import spec_d
     from spec_b import SpecError
     from tcvn import ProfileError, read_profile
-    validate, build = {"A": (spec_a.validate, build_a.build), "B": (spec_b.validate, build_b.build), "C": (spec_c.validate, build_c.build)}[k]
+    validate, build = {"A": (spec_a.validate, build_a.build), "B": (spec_b.validate, build_b.build), "C": (spec_c.validate, build_c.build), "D": (spec_d.validate, build_d.build)}[k]
     try:
         sp = validate(spec)
         D = build(sp, read_profile(profile))
@@ -234,7 +273,7 @@ def check(loai: str, spec_path: str, write_spec: str | None, profile: str | None
         sc = f"mặt cắt 1:{D.scale}, mặt bằng 1:{D.info['scale_plan']}"
     res = dict(hop_le=True, loai=loai, ten=ten, kho_giay=D.info.get("sheet", "A3"), ty_le=sc, bo_cuc=D.info.get("layout"), ly_do=D.info["reason"], so_do=_derived(loai, sp, D),
                canh_bao=canh_bao_them + list(D.info.get("warnings", [])) + list(D.info.get("notes", [])), da_dung_mac_dinh=da_dung, thu_muc_ket_qua=f"out\\{ten}\\")
-    if k == "C":
+    if k in ("C", "D"):
         res["quy_uoc"] = D.info.get("convention")
     if write_spec:
         with open(write_spec, "w", encoding="utf-8") as fh:
