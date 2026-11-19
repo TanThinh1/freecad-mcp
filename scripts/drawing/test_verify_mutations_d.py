@@ -89,6 +89,7 @@ def main():
     for k in ("d1", "d2", "d3", "d4"):
         S[k] = load(k, profile)
     S["d1x"] = load("d1", profile, tiet_dien_xa_go="C200x70x20x2.5")                 # explicit purlin section: no MẶC ĐỊNH
+    S["d1f"] = load("d1", profile, dai_nha=7200, buoc_cot=1800)                      # bays of 18 mm: TIM NÓC and the column label do not fit -> fallback (outside, left of axis 1)
     S["d1w"] = load("d1", profile, buoc_xa_go=2200)                                  # outside 800-2000: soft warning
     work = os.path.join(OUT, "_mutations_d")
     shutil.rmtree(work, ignore_errors=True)
@@ -234,14 +235,36 @@ def main():
     add("note_on_layer_NET-MANH", "d1", lambda D: setattr(note(D, "note_count"), "layer", "NET-MANH"), {"1.38"}, {"2.24"})
     add("notes_overlapping", "d1", lambda D: setattr(note(D, "note_real"), "pos", (note(D, "note_real").pos[0], note(D, "note_count").pos[1] - 1.0)), {"1.38"})
     add("ridge_label_deleted", "d1", lambda D: D.prims.remove(note(D, "ridge_label")), {"1.38"}, {"2.24"})
-    add("ridge_label_text_changed", "d1", lambda D: setattr(note(D, "ridge_label"), "s", "TIM NÓC"), {"1.38"}, {"2.24"})
+    add("ridge_label_text_changed_to_the_old_long_text", "d1", lambda D: setattr(note(D, "ridge_label"), "s", "TIM NÓC (HAI XÀ GỒ NÓC TRÙNG NHAU)"), {"1.38"}, {"2.24"})
     add("ridge_label_moved_3mm_paper", "d1", lambda D: setattr(note(D, "ridge_label"), "pos", (note(D, "ridge_label").pos[0], note(D, "ridge_label").pos[1] + 3.0)), {"1.38"})
-    add("ridge_label_present_with_one_roof", "d2", lambda D: D.prims.append(Text(layer="CHU", tag="ridge_label", s="TIM NÓC (HAI XÀ GỒ NÓC TRÙNG NHAU)", pos=(100.0, 100.0), h=2.5, halign="right")), {"1.38"}, {"2.24"})
+    add("ridge_label_present_with_one_roof", "d2", lambda D: D.prims.append(Text(layer="CHU", tag="ridge_label", s="TIM NÓC", pos=(100.0, 100.0), h=2.5, halign="right")), {"1.38"}, {"2.24"})
     add("title_text_changed", "d1", lambda D: setattr(note(D, "title"), "s", "MẶT BẰNG XÀ GỒ"), {"1.39"})
     add("title_not_bold", "d1", lambda D: setattr(note(D, "title"), "bold", False), {"1.39"})
     add("scale_note_1:50_on_1:100", "d1", lambda D: setattr(note(D, "scale_note"), "s", "TỶ LỆ 1:50"), {"1.39"}, {"2.24"})
     add("title_block_number_KC-03", "d1", lambda D: D.fields.__setitem__("cell4", "KC-03"), {"1.39"})
     add("title_block_scale_cell_1:50", "d1", lambda D: D.fields.__setitem__("cell7", "1:50"), {"1.39"})
+
+    # ---------------------------------------------------------------- text boxes against the vertical axes (1.45 / 2.26 / 3.10) and the placement rule of the labels among the axes
+    def axis_x(D, k):
+        return sorted(by_tag(D, "axis_v"), key=lambda p: p.p1[0])[k].p1[0]
+
+    def ridge_old_place(D):                       # the old layout: the long text, right-aligned 3 mm before the last axis -> axis 5 crosses it
+        r = note(D, "ridge_label")
+        r.s, r.halign, r.pos = "TIM NÓC (HAI XÀ GỒ NÓC TRÙNG NHAU)", "right", (axis_x(D, -1) - 3.0, r.pos[1])
+    add("ridge_label_old_long_text_at_the_old_place_crosses_axis_5", "d1", ridge_old_place, {"1.45", "1.38"}, {"2.26"})
+    add("ridge_label_short_text_centred_on_axis_4", "d1", lambda D: setattr(note(D, "ridge_label"), "pos", (axis_x(D, 3), note(D, "ridge_label").pos[1])), {"1.45", "1.38"}, {"2.26"})
+    add("ridge_label_short_text_right_aligned_on_axis_6", "d1", lambda D: (setattr(note(D, "ridge_label"), "halign", "right"), setattr(note(D, "ridge_label"), "pos", (axis_x(D, -1) + 1.0, note(D, "ridge_label").pos[1]))), {"1.45", "1.38"}, {"2.26"})
+    add("ridge_label_in_first_bay_instead_of_the_right_most", "d1", lambda D: setattr(note(D, "ridge_label"), "pos", ((axis_x(D, 0) + axis_x(D, 1)) / 2, note(D, "ridge_label").pos[1])), {"1.38"})
+    add("ridge_label_left_aligned_in_the_bay_not_centred", "d1", lambda D: (setattr(note(D, "ridge_label"), "halign", "left"), setattr(note(D, "ridge_label"), "pos", (axis_x(D, -2) + 2.0, note(D, "ridge_label").pos[1]))), {"1.38"})
+    add("column_label_straddling_axis_2", "d1", lambda D: setattr(note(D, "col_label"), "pos", (axis_x(D, 1) - 5.0, note(D, "col_label").pos[1])), {"1.45", "1.38"}, {"2.26"})
+    add("note_pulled_up_across_the_plan_crosses_every_axis", "d1", lambda D: setattr(note(D, "note_count"), "pos", (note(D, "note_count").pos[0], note(D, "ridge_label").pos[1] + 12.0)), {"1.45", "1.38"}, {"2.26"})
+    add("bottom_dimension_label_moved_up_onto_axis_3", "d1", lambda D: [setattr(t, "pos", (axis_x(D, 2), D.origin[1] - 2.0)) for t in text_by(D, "dim_chain_text", "6000")[:1]], {"1.45", "1.37"}, {"2.26"})
+    add("bubble_label_dragged_down_onto_the_axis_line", "d1", lambda D: shift(D, [t for t in text_by(D, "bubble_text", "3")][0], 0.0, -8.0 * D.scale), {"1.45", "1.36"}, {"2.26"})
+    add("narrow_bays_ridge_label_forced_into_the_right_most_bay", "d1f", lambda D: setattr(note(D, "ridge_label"), "pos", ((axis_x(D, -2) + axis_x(D, -1)) / 2, note(D, "ridge_label").pos[1])) or setattr(note(D, "ridge_label"), "halign", "center"), {"1.38"})
+    add("narrow_bays_ridge_label_centred_on_an_axis", "d1f", lambda D: setattr(note(D, "ridge_label"), "pos", (axis_x(D, 2), note(D, "ridge_label").pos[1])) or setattr(note(D, "ridge_label"), "halign", "center"), {"1.45", "1.38"}, {"2.26"})
+    add("narrow_bays_ridge_label_not_moved_outside", "d1f", lambda D: setattr(note(D, "ridge_label"), "halign", "center"), {"1.38"})
+    add("narrow_bays_column_label_kept_in_the_first_bay_crosses_axis_2", "d1f", lambda D: (setattr(note(D, "col_label"), "halign", "left"), setattr(note(D, "col_label"), "pos", (axis_x(D, 0) + 2.625, D.origin[1] + 1.2))), {"1.45", "1.38"}, {"2.26"})
+    add("narrow_bays_ridge_label_moved_3mm_further_left", "d1f", lambda D: setattr(note(D, "ridge_label"), "pos", (note(D, "ridge_label").pos[0] - 3.0, note(D, "ridge_label").pos[1])), {"1.38"})
 
     # ---------------------------------------------------------------- grid + columns
     add("column_deleted", "d1", lambda D: D.prims.remove(by_tag(D, "column")[3]), {"1.36"}, {"2.25"})
@@ -372,6 +395,9 @@ def main():
     vdim = [e for e in dx0["ents"] if e["type"] == "LINE" and e["layer"] == "KICH-THUOC" and abs(float(e["rec"][10][0]) - float(e["rec"][11][0])) < 1e-6 and float(e["rec"][10][0]) > 30200]
     yv = sorted(vdim, key=lambda e: (float(e["rec"][10][0]), float(e["rec"][20][0])))[1]["rec"][21][0]
     edit_entity("dxf_value_chain_dimension_end_+0.5mm", "KICH-THUOC", "LINE", 21, lambda v: v == yv, f"{float(yv) + 0.5:.6f}", {"2.23", "2.9"})
+    ridge = [e for e in dx0["ents"] if e["type"] == "TEXT" and e["layer"] == "CHU" and (e["rec"].get(1) or [""])[0].startswith("TIM N")][0]["rec"]
+    edit_entity("dxf_value_ridge_label_start_x_moved_onto_axis_4", "CHU", "TEXT", 10, lambda v: v == ridge[10][0], "18000.000000", {"2.26", "2.9"})
+    edit_entity("dxf_value_ridge_label_start_x_moved_across_axis_6_by_5mm", "CHU", "TEXT", 10, lambda v: v == ridge[10][0], f"{30000.0 - 5.0 * 100:.6f}", {"2.26", "2.9"})
     edit_entity("dxf_value_purlin_layer_changed_to_NET-MANH", "XA-GO", "LINE", 8, lambda v: v == "XA-GO", "NET-MANH", {"2.22", "2.5"})
 
     # ---- DWG read-back check 3.9: through a real ODA round trip (control) and on a corrupted DXF read back
@@ -394,6 +420,11 @@ def main():
             C = verify.Checks()
             verify_d.check_dwg_d(C, D1, sp1, read_dxf(pbad))
             need({"3.9"}, failed(C), "dwg_read_back_purlin_moved_0.5mm")
+            Dm = mut(lambda D: setattr(note(D, "ridge_label"), "pos", (axis_x(D, 3), note(D, "ridge_label").pos[1])), D1)
+            _, _, pbad = dxf_of(Dm, "dwg_ridge_label_on_axis_4", Dm, sp1)
+            C = verify.Checks()
+            verify_d.check_dwg_d(C, D1, sp1, read_dxf(pbad))
+            need({"3.10"}, failed(C), "dwg_read_back_ridge_label_straddles_axis_4")
             Dm = mut(lambda D: D.prims.remove(dim_lines(D, True)[1]), D1)
             _, _, pbad = dxf_of(Dm, "dwg_chain_segment_deleted", Dm, sp1)
             C = verify.Checks()

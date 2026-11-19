@@ -1,6 +1,6 @@
 """Verification specific to drawing type D (purlin plan of a roof). Every expected value is derived HERE from the spec numbers with its own formulas (never from build_d.py):
 exact rational arithmetic for the purlin positions, n = smallest integer with n^2 * buoc_xa_go^2 >= L^2 (loop, no square root), printed numbers rounded half up with Decimal.
-Layer: 1 primitives, 2 DXF read back, 3 DWG read back (same function as 2), 5 PDF strokes against the DXF. New check ids only (1.34-1.44, 2.22-2.25, 3.9, 5.8): no id is shared with
+Layer: 1 primitives, 2 DXF read back, 3 DWG read back (same function as 2), 5 PDF strokes against the DXF. New check ids only (1.34-1.45, 2.22-2.26, 3.9, 3.10, 5.8): no id is shared with
 the checks of type A, B or C. Details say "suy luận" for anything inferred and not measured.
 """
 from __future__ import annotations
@@ -12,7 +12,7 @@ from fractions import Fraction
 
 from primitives import Line, Text, cap_to_em, prim_bbox
 from readers import f, unesc
-from tcvn import SHEETS, est_width
+from tcvn import ARIAL_CAP, SHEETS, est_width
 from verify import Checks, check_expressions, close
 
 TOL = 1e-6              # real mm, floating point only
@@ -21,9 +21,11 @@ TOL_PDF = 0.06          # mm on paper
 PURLIN_LAYER = "XA-GO"
 TITLE = "MẶT BẰNG XÀ GỒ MÁI"
 DEFAULT_NO = "KC-04"
-RIDGE = "TIM NÓC (HAI XÀ GỒ NÓC TRÙNG NHAU)"
+RIDGE = "TIM NÓC"
 SOFT_MIN, SOFT_MAX = 800, 2000
 SCALE_LIMIT = 200
+AXIS_MARGIN = 0.3        # mm: a text box is "crossing" a vertical axis line when the line is nearer than this to the box (or inside it)
+SLOT_CLEAR = 1.5         # paper mm between a label put between two axes and each axis (the placement rule)
 MARGIN = 5.0             # paper mm between any drawn item and the frame / the title block
 
 
@@ -69,7 +71,7 @@ def expect_values(sp: dict) -> dict:
 def expect_notes(sp: dict, X: dict) -> list:
     n, m, half, p = X["n"], X["m"], X["half"], X["p"]
     pur = "XÀ GỒ " + sp["xa_go"]["text"] + (" (MẶC ĐỊNH)" if sp["xa_go_mac_dinh"] else "")
-    count = f"SỐ LƯỢNG: 2 x {n + 1} = {2 * (n + 1)} XÀ GỒ (2 MÁI)" if m == 2 else f"SỐ LƯỢNG: {n + 1} XÀ GỒ (1 MÁI, DỐC LÊN TRỤC B)"
+    count = f"SỐ LƯỢNG: 2 x {n + 1} = {2 * (n + 1)} XÀ GỒ (2 MÁI; XÀ GỒ NÓC TRÙNG NHAU)" if m == 2 else f"SỐ LƯỢNG: {n + 1} XÀ GỒ (1 MÁI, DỐC LÊN TRỤC B)"
     proj = f"{n} x {_dec1(p)} = {_dec1(half)}" if p.denominator == 1 else f"{_dec1(half)}/{n} ≈ {_dec1(p)}"
     pct = (f"{sp['do_doc_mai']:g}").replace(".", ",")
     deg = f"{X['theta']:.1f}".replace(".", ",")
@@ -225,8 +227,27 @@ def check_primitives_d(C: Checks, D, sp):
     ridge = D.by_tag("ridge_label")
     ry = _real(D, ridge[0].pos)[1] if ridge else None
     ridge_ok = (not ridge) if X["m"] == 1 else (len(ridge) == 1 and ridge[0].s == RIDGE and ridge[0].layer == "CHU" and close(ry, half + 1.2 * s, 1e-3))
+    # placement rule (own measurement: real Arial width + 5 %): between the two right-most axes that hold the text with SLOT_CLEAR on both sides, else outside, left of axis 1
+    ax = sorted(a[0] for a in primitive_axes(D))
+
+    def slot_for(width):
+        return next((i for i in range(len(ax) - 2, -1, -1) if ax[i + 1] - ax[i] - 2 * SLOT_CLEAR >= width - 1e-9), None)
+    place = ""
+    if X["m"] == 2 and len(ridge) == 1 and len(ax) >= 2:
+        i = slot_for(_real_width(RIDGE, False, cap_to_em(P["cao_chu_ghi_chu"]), 1.0, 1.05))
+        want_x, want_a = (((ax[i] + ax[i + 1]) / 2, "center") if i is not None else (ax[0] - 2.0, "right"))
+        ridge_ok = ridge_ok and close(ridge[0].pos[0], want_x, 1e-6) and ridge[0].halign == want_a
+        place = f"; tim nóc {'giữa trục ' + str(i + 1) + ' và ' + str(i + 2) if i is not None else 'ngoài, trái trục 1 (dự phòng)'}"
+    col = D.by_tag("col_label")
+    hxp = (b / 2) / s
+    w_c = _real_width(sp["section"]["text"], False, cap_to_em(P["cao_chu_nhan"]), 1.0, 1.05)
+    first_bay = len(ax) >= 2 and ax[0] + hxp + 2.0 + w_c + SLOT_CLEAR <= ax[1]
+    want_c = (ax[0] + hxp + 2.0, D.origin[1] + 1.2, "left") if first_bay else (ax[0] - 2.0, D.origin[1] + dia / 2 + 1.5, "right")
+    col_ok = len(col) == 1 and col[0].s == sp["section"]["text"] and close(col[0].pos[0], want_c[0], 1e-6) and close(col[0].pos[1], want_c[1], 1e-6) and col[0].halign == want_c[2]
+    place += f"; nhãn cột {'trong nhịp đầu' if first_bay else 'ngoài, trái trục 1 (dự phòng)'} {col_ok}"
+    ridge_ok = ridge_ok and col_ok
     C.add(1, "1.38", "ghi chú: tiết diện xà gồ (+ 'MẶC ĐỊNH' khi không do người dùng nhập), số lượng, khoảng cách thực theo mặt dốc, khoảng cách chiếu, độ dốc; 'TIM NÓC' chỉ khi 2 mái; đúng chuỗi, đúng lớp CHU, căn giữa, không đè nhau",
-          notes_ok and ridge_ok, f"ghi chú {[(t, len(got_n[t])) for t, _ in exp_n]} đúng chuỗi {notes_ok}; nhãn tim nóc {ridge_ok}; mong đợi {[x for _, x in exp_n]}")
+          notes_ok and ridge_ok, f"ghi chú {[(t, len(got_n[t])) for t, _ in exp_n]} đúng chuỗi {notes_ok}; nhãn tim nóc + nhãn cột {ridge_ok}{place}; mong đợi {[x for _, x in exp_n]}")
 
     # ---- title, scale, title block
     kt = sp["khung_ten"]
@@ -267,6 +288,8 @@ def check_primitives_d(C: Checks, D, sp):
     defaults_ok = ("tiet_dien_xa_go" in D.info.get("defaults", [])) == bool(sp["xa_go_mac_dinh"]) and ("tiet_dien_cot" in D.info.get("defaults", [])) == bool(sp["cot_mac_dinh"])
     C.add(1, "1.43", "giá trị mặc định (tiet_dien_cot H250x125x6x9, tiet_dien_xa_go C150x50x20x2.0) được ghi nhận trong báo cáo đúng với spec; tiết diện xà gồ mặc định có chữ MẶC ĐỊNH trên bản vẽ", defaults_ok and any(
         t.s.endswith("(MẶC ĐỊNH)") for t in D.by_tag("note_purlin")) == bool(sp["xa_go_mac_dinh"]), f"mặc định ghi nhận: {D.info.get('defaults')}")
+    boxes = primitive_text_boxes(D)
+    check_text_axes_d(C, D, 1, "1.45", "bản vẽ (primitives)", boxes, primitive_axes(D), "mm giấy", sum(1 for t in D.prims if isinstance(t, Text)))
 
 
 def check_policy(C: Checks, D, sp, X):
@@ -291,6 +314,76 @@ def check_policy(C: Checks, D, sp, X):
             why.append(f"{sh_} 1:{sc} vẫn vừa")
     C.add(1, "1.44", "khổ giấy + tỷ lệ theo quy tắc: ưu tiên A3, lên A2 rồi A1 chỉ khi khổ nhỏ hơn không vừa ở tỷ lệ ≤ 1:200; tỷ lệ lớn nhất còn vừa; khớp ty_le/kho_giay do người dùng chọn; đo: bản vẽ vừa cặp đã chọn, suy luận: các cặp đứng trước không vừa (dùng lại hàm bố cục)",
           found and not why and (not sp["scale"] or D.scale == sp["scale"]) and (kho == "auto" or D.sheet == kho), f"chọn {D.sheet} 1:{D.scale}; cặp đứng trước vẫn vừa: {why[:3]}; có trong danh sách {found}")
+
+
+# ------------------------------------------------------------------ text boxes against the vertical axes (1.45 / 2.26 / 3.10)
+def _real_width(s: str, bold: bool, em: float, wf: float, reserve: float = 1.0) -> float:
+    """Width of a string in the unit of `em`, from the real Arial advance widths (fontmetrics; arial.ttf when installed, else the embedded table)."""
+    import fontmetrics
+    return fontmetrics.text_em(s, bold, "ttf" if fontmetrics.have_ttf(False) else "table") * em * wf * reserve
+
+
+def _box(x, y, w, h, rot):
+    """Axis-aligned bounds of a text box: baseline start (x, y), length w along the rotation, from -0.25 h (descenders) to +1.35 h (capital with a Vietnamese mark)."""
+    c, s = math.cos(math.radians(rot)), math.sin(math.radians(rot))
+    pts = [(x + a * c - b * s, y + a * s + b * c) for a in (0.0, w) for b in (-0.25 * h, 1.35 * h)]
+    xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def text_axis_findings(boxes, axes, margin):
+    """boxes = [(text, (x0, y0, x1, y1))], axes = [(x, y_lo, y_hi)] (same unit). -> (crossings, smallest clearance to an axis among the boxes that share its height)."""
+    bad, best = [], 1e9
+    for txt, (x0, y0, x1, y1) in boxes:
+        for ax, ylo, yhi in axes:
+            if y1 < ylo or y0 > yhi:
+                continue
+            gap = max(x0 - ax, ax - x1, 0.0) if not (x0 <= ax <= x1) else -min(ax - x0, x1 - ax)
+            best = min(best, gap)
+            if gap < margin:
+                bad.append((txt, round(ax, 3)))
+    return bad, best
+
+
+def check_text_axes_d(C: Checks, D, group: int, cid: str, where: str, boxes, axes, unit: str, n_texts: int):
+    bad, best = text_axis_findings(boxes, axes, AXIS_MARGIN * (D.scale if unit == "mm thật" else 1.0))
+    C.add(group, cid, f"{where}: không chuỗi chữ nào có hộp bao (độ rộng đo bằng bảng Arial thật) cắt ngang hoặc chạm (≤ {AXIS_MARGIN:g} mm giấy) một nét trục dọc lớp TRUC", bool(boxes) and len(boxes) == n_texts and bool(axes) and not bad,
+          f"{len(boxes)}/{n_texts} chuỗi, {len(axes)} nét trục dọc; cắt/chạm: {bad[:3]}; khoảng cách nhỏ nhất tới một trục ở cùng độ cao: {best if best < 1e8 else 'không có'} ({unit})")
+
+
+def primitive_text_boxes(D):
+    out = []
+    for t in D.prims:
+        if isinstance(t, Text):
+            w = _real_width(t.s, t.bold, cap_to_em(t.h), t.wf)
+            x = t.pos[0] - {"left": 0.0, "center": w / 2, "right": w}[t.halign] * math.cos(math.radians(t.rot))
+            y = t.pos[1] - {"left": 0.0, "center": w / 2, "right": w}[t.halign] * math.sin(math.radians(t.rot))
+            out.append((t.s, _box(x, y, w, t.h, t.rot)))
+    return out
+
+
+def primitive_axes(D):
+    return [(l.p1[0], min(l.p1[1], l.p2[1]), max(l.p1[1], l.p2[1])) for l in D.prims if isinstance(l, Line) and l.layer == "TRUC" and abs(l.p1[0] - l.p2[0]) < 1e-9]
+
+
+def dxf_text_boxes(dx):
+    """Real-mm boxes of every TEXT of a DXF: code 10/20 = left end of the baseline (see 2.14), 40 height, 41 width factor, 50 rotation."""
+    out = []
+    for e in dx["ents"]:
+        if e["type"] != "TEXT":
+            continue
+        r = e["rec"]
+        try:
+            txt = unesc("".join(r.get(3, [])) + (r.get(1) or [""])[0])
+            h, wf, rot = f(r, 40), (f(r, 41) if 41 in r else 1.0), (f(r, 50) if 50 in r else 0.0)
+            out.append((txt, _box(f(r, 10), f(r, 20), _real_width(txt, False, h / ARIAL_CAP, wf), h, rot)))
+        except (KeyError, ValueError, IndexError):
+            continue
+    return out
+
+
+def dxf_axes(dx):
+    return [(a[0], min(a[1], c[1]), max(a[1], c[1])) for a, c in _dxf_lines(dx, "TRUC") if abs(a[0] - c[0]) < 1e-6]
 
 
 # ------------------------------------------------------------------ 2/3. DXF (and the DWG read back)
@@ -371,6 +464,8 @@ def check_dxf_d(C: Checks, D, sp, dx):
     ctr_ok = len(ctr) == 2 * N and all(any(abs(i * buoc - g[0]) <= TOL_DXF and abs(j * nhip - g[1]) <= TOL_DXF for g in ctr) for i in range(N) for j in (0, 1))
     bub = collections.Counter(t for lay, t in dx["texts"] if lay == "TRUC-KYHIEU")
     bub_ok = bub == collections.Counter([str(i + 1) for i in range(N)] + ["A", "B"])
+    boxes = dxf_text_boxes(dx)
+    check_text_axes_d(C, D, 2, "2.26", "DXF", boxes, dxf_axes(dx), "mm thật", sum(1 for e in dx["ents"] if e["type"] == "TEXT"))
     C.add(2, "2.25", "DXF: trục dọc tại x = i × buoc_cot, 2 trục ngang tại y = 0 và nhịp, độ dài trục, 2N cột b × h tại giao điểm (mm thật), chữ ký hiệu trục 1..N, A, B",
           _match_set([float(i * buoc) for i in range(N)], vx, TOL_DXF)[0] and _match_set([0.0, nhip], hy, TOL_DXF)[0] and len_ok and dict(sizes) == {(round(b, 3), round(h, 3)): 2 * N} and ctr_ok and bub_ok,
           f"x trục dọc {sorted(round(v, 3) for v in vx)[:3]}…; y trục ngang {sorted(round(v, 3) for v in hy)}; độ dài {len_ok}; cột {dict(sizes)} đúng tâm {ctr_ok}; chữ trục {bub_ok}")
@@ -378,6 +473,8 @@ def check_dxf_d(C: Checks, D, sp, dx):
 
 def check_dwg_d(C: Checks, D, sp, bx):
     ok_p, det_p, ok_d, det_d = dxf_purlin_dims(bx, sp, expect_values(sp))
+    boxes = dxf_text_boxes(bx)
+    check_text_axes_d(C, D, 3, "3.10", "DWG (đọc lại sau khứ hồi)", boxes, dxf_axes(bx), "mm thật", sum(1 for e in bx["ents"] if e["type"] == "TEXT"))
     C.add(3, "3.9", "DWG đọc lại sau khứ hồi: xà gồ (lớp XA-GO) và chuỗi kích thước xà gồ vẫn đúng vị trí/số lượng (mm thật, ±0,001)", ok_p and ok_d, f"xà gồ: {det_p}; kích thước: {det_d}")
 
 

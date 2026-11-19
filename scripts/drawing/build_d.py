@@ -20,14 +20,15 @@ from scale import place_rects, sheet_scale_candidates
 from spec_b import SpecError
 from spec_c import percent_text, round_half_up
 from spec_d import fmt_len
-from tcvn import ARIAL_CAP, SHEETS, est_width, LAYER_AXIS, LAYER_BUBBLE, LAYER_COLUMN, LAYER_DIM, LAYER_TEXT
+from tcvn import ARIAL_CAP, SHEETS, cons_width, est_width, LAYER_AXIS, LAYER_BUBBLE, LAYER_COLUMN, LAYER_DIM, LAYER_TEXT
 
 LAYER_PURLIN = "XA-GO"
 NEEDED_LAYERS = NEEDED_B + (LAYER_PURLIN,)
 VIEW_TITLE = "MẶT BẰNG XÀ GỒ MÁI"
-RIDGE_LABEL = "TIM NÓC (HAI XÀ GỒ NÓC TRÙNG NHAU)"
+RIDGE_LABEL = "TIM NÓC"
 SHEET_SCALE_LIMIT = 200          # A2 / A1 are used only when A3 does not hold the drawing at 1:200 or finer
 DEFAULT_SHEET_NO = "KC-04"       # drawing number used when khung_ten.ky_hieu_ban_ve is empty
+AXIS_CLEAR = 1.5                 # paper mm kept free between a label placed between two vertical axes and each of them
 LABEL_CLEAR = 3.0                # paper mm kept free around a purlin-spacing label along its dimension line: two 45-degree ticks (2.5 mm bbox) + 0.5 mm
 
 
@@ -40,7 +41,7 @@ def note_lines(sp: dict) -> list[tuple[str, str]]:
     n, m, half = sp["n"], sp["so_mai"], sp["half"]
     pur = sp["xa_go"]["text"] + (" (MẶC ĐỊNH)" if sp["xa_go_mac_dinh"] else "")
     if m == 2:
-        count = f"SỐ LƯỢNG: 2 x {n + 1} = {2 * (n + 1)} XÀ GỒ (2 MÁI)"
+        count = f"SỐ LƯỢNG: 2 x {n + 1} = {2 * (n + 1)} XÀ GỒ (2 MÁI; XÀ GỒ NÓC TRÙNG NHAU)"
     else:
         count = f"SỐ LƯỢNG: {n + 1} XÀ GỒ (1 MÁI, DỐC LÊN TRỤC B)"
     p = sp["proj_spacing"]
@@ -58,6 +59,15 @@ def purlin_positions(sp: dict) -> list[Fraction]:
     if sp["so_mai"] == 2:
         ys += [nhip - y for y in ys[:-1]]
     return sorted(ys)
+
+
+def bay_slot(xs: list, width: float):
+    """Index i of the right-most bay (between vertical axes i and i + 1) that holds a text `width` paper mm wide with AXIS_CLEAR free on both sides; None when no bay does.
+    `width` is the real Arial width + 5 % (tcvn.cons_width), so the text really stays between the two axis lines."""
+    for i in range(len(xs) - 2, -1, -1):
+        if xs[i + 1] - xs[i] - 2 * AXIS_CLEAR >= width - 1e-9:
+            return i
+    return None
 
 
 def labels_fit(sp: dict, s: int) -> str:
@@ -85,8 +95,6 @@ def layout(sp: dict, s: int):
     for i, x in enumerate(xs):
         for j, y in enumerate(ys):
             add(Rect(layer=LAYER_COLUMN, tag="column", p0=(x - hx, y - hy), p1=(x + hx, y + hy)))
-            if i == 0 and j == 0:
-                add(Text(layer=LAYER_TEXT, tag="col_label", s=sec["text"], pos=(x + hx + 2.0, y + 1.2), h=P["cao_chu_nhan"]))
     y_bot, y_top = ys[0] - hy - ov, ys[1] + hy + ov
     for i, x in enumerate(xs):
         add(Line(layer=LAYER_AXIS, tag="axis_v", p1=(x, y_bot), p2=(x, y_top)))
@@ -99,11 +107,23 @@ def layout(sp: dict, s: int):
         cx = x_left - gp - rb
         add(Circle(layer=LAYER_BUBBLE, tag="bubble", c=(cx, y), r=rb))
         add(Text(layer=LAYER_BUBBLE, tag="bubble_text", s=string.ascii_uppercase[j], pos=(cx, y - hb / 2), h=hb, halign="center"))
+    # ---- labels that sit among the vertical axes. Rule: a text goes between two neighbouring axes only when its REAL width (+ 5 %) plus AXIS_CLEAR on both sides fits the bay;
+    # otherwise it goes outside the axis area, to the left of the first axis (fallback). Column label: first bay, right of column 1 / axis A; fallback above the bubble of axis A.
+    w_col = cons_width(sec["text"], cap_to_em(P["cao_chu_nhan"]))
+    if xs[0] + hx + 2.0 + w_col + AXIS_CLEAR <= xs[1]:
+        add(Text(layer=LAYER_TEXT, tag="col_label", s=sec["text"], pos=(xs[0] + hx + 2.0, ys[0] + 1.2), h=P["cao_chu_nhan"]))
+    else:
+        add(Text(layer=LAYER_TEXT, tag="col_label", s=sec["text"], pos=(xs[0] - 2.0, ys[0] + rb + 1.5), h=P["cao_chu_nhan"], halign="right"))
     # ---- purlins: one line per distinct plan position, along the whole building length (axis 1 .. axis N)
     for y in purlin_positions(sp):
         add(Line(layer=LAYER_PURLIN, tag="purlin", p1=(xs[0], X(y)), p2=(xs[-1], X(y))))
     if sp["so_mai"] == 2:
-        add(Text(layer=LAYER_TEXT, tag="ridge_label", s=RIDGE_LABEL, pos=(xs[-1] - 3.0, X(sp["half"]) + 1.2), h=P["cao_chu_ghi_chu"], halign="right"))
+        ry = X(sp["half"]) + 1.2
+        i = bay_slot(xs, cons_width(RIDGE_LABEL, cap_to_em(P["cao_chu_ghi_chu"])))
+        if i is not None:
+            add(Text(layer=LAYER_TEXT, tag="ridge_label", s=RIDGE_LABEL, pos=((xs[i] + xs[i + 1]) / 2, ry), h=P["cao_chu_ghi_chu"], halign="center"))
+        else:
+            add(Text(layer=LAYER_TEXT, tag="ridge_label", s=RIDGE_LABEL, pos=(xs[0] - 2.0, ry), h=P["cao_chu_ghi_chu"], halign="right"))
     # ---- dimensions: bottom chain + overall (as type B)
     chain_y = y_bot - P["kt_dau_tien"]
     overall_y = chain_y - P["kt_giua_cac_duong"]
