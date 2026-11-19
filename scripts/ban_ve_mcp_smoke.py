@@ -58,7 +58,7 @@ async def main():
             for loai, ex in cases:
                 d, _, err, dt = await call("kiem_tra_spec", {"loai": loai, "spec": spec(ex)})
                 print(f"kiem_tra_spec({loai}): {dt:.2f}s hop_le={d.get('hop_le')} ten={d.get('ten')} ty_le={d.get('ty_le')} canh_bao={len(d.get('canh_bao', []))} so_do={d.get('so_do')}")
-            bad = {"thang": {"cao_tang": -5, "so_bac": 1, "be_rong_mat_bac": 250, "be_rong_ve": 800, "dam_con": "H60x120x2"},
+            bad = {"thang": {"cao_tang": -5, "so_bac": 1, "be_rong_mat_bac": 250, "be_rong_ve": 800, "dam_con": "H75x150x2"},
                    "luoi_cot": {"nhip": 16500, "dai_nha": 31750, "buoc_cot": 6000, "tiet_dien_cot": "H300x150x6x9"},
                    "khung_ngang": {"nhip": 0, "cao_cot": 6000, "do_doc_mai": 120, "so_mai": 3, "tiet_dien_cot": "abc", "tiet_dien_keo": "H250x125x6x9"}}
             for loai, sp_ in bad.items():

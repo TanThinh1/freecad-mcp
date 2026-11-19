@@ -31,7 +31,7 @@ BAT_BUOC = {"thang": ("cao_tang", "so_bac", "be_rong_ve"), "luoi_cot": ("nhip", 
 # Secondary values used when the spec omits them (the answer lists every default that was applied so the assistant can tell the customer).
 # These are tool defaults taken from the examples, NOT values verified from a standard.
 MAC_DINH = {
-    "thang": {"be_rong_mat_bac": (250, "bước bậc b"), "dam_con": ("H60x120x2", "dầm cốn hộp rộng x cao x dày thành, mm"), "chieu_day_tam": (3, "mm, thép tấm mặt bậc"), "ty_le": ("auto", "tỷ lệ tự chọn")},
+    "thang": {"be_rong_mat_bac": (250, "bước bậc b"), "dam_con": ("H75x150x2", "dầm cốn hộp rộng x cao x dày thành, mm"), "chieu_day_tam": (3, "mm, thép tấm mặt bậc"), "ty_le": ("auto", "tỷ lệ tự chọn")},
     "luoi_cot": {"tiet_dien_cot": ("H250x125x6x9", "tiết diện cột"), "ty_le": ("auto", "tỷ lệ tự chọn")},
     "khung_ngang": {"tiet_dien_cot": ("H250x125x6x9", "tiết diện cột"), "tiet_dien_keo": ("H250x125x6x9", "tiết diện kèo"), "ty_le": ("auto", "tỷ lệ tự chọn")},
 }
@@ -61,7 +61,7 @@ GUIDE = {
             dict(ten="so_bac", don_vi="bậc", bat_buoc=True, mo_ta="số lần nâng (số bậc cao), nguyên 2..200; số mặt bậc = so_bac − 1; chiều cao bậc h = cao_tang/so_bac (không làm tròn trong hình học)"),
             dict(ten="be_rong_mat_bac", don_vi="mm", bat_buoc=False, mac_dinh=250, mo_ta="bước bậc b (bề rộng mặt bậc theo phương chạy), số nguyên > 0"),
             dict(ten="be_rong_ve", don_vi="mm", bat_buoc=True, mo_ta="bề rộng vế thang, phải lớn hơn 2 lần bề rộng dầm cốn"),
-            dict(ten="dam_con", bat_buoc=False, mac_dinh="H60x120x2", mo_ta="dầm cốn hộp, dạng \"H60x120x2\" = rộng x cao x dày thành (mm); có 2 dầm cốn"),
+            dict(ten="dam_con", bat_buoc=False, mac_dinh="H75x150x2", mo_ta="dầm cốn hộp, dạng \"H75x150x2\" = rộng x cao x dày thành (mm); có 2 dầm cốn. Để dầm che TRỌN bậc, cao dầm phải >= h·cosθ (khoảng 145 mm cho thang 3000 cao, 17 bậc, bước bậc 250); thấp hơn thì hệ thống cảnh báo và hạ dải dầm cho che hết chân bậc"),
             dict(ten="chieu_day_tam", don_vi="mm", bat_buoc=False, mac_dinh=3, mo_ta="chiều dày thép tấm mặt bậc (ghi chú \"THÉP TẤM DÀY n MM\")"),
             dict(ten="ty_le", bat_buoc=False, mac_dinh="auto", mo_ta="xem quy tắc chung"),
             dict(ten="bo_cuc", bat_buoc=False, mac_dinh="auto", mo_ta="\"auto\" | \"chong\" (mặt bằng dưới mặt cắt) | \"ngang\" (mặt bằng bên phải mặt cắt)"),

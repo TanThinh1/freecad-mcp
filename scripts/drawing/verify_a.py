@@ -126,6 +126,7 @@ def check_primitives_a(C: Checks, D, sp):
     check_extras_a(C, D, sp)
     check_dam_label(C, D, sp)
     check_stringer_covers_a(C, D, sp)
+    check_steps_inside_a(C, D, sp)
     segs = [(g.p1, g.p2) for g in D.prims if isinstance(g, Line) and not g.sheet and not g.tag.startswith("dim_")]
     for r_ in (p for p in D.prims if isinstance(p, Rect) and not p.sheet):
         (ax_, ay_), (bx_, by_) = r_.p0, r_.p1
@@ -161,6 +162,62 @@ def _stringer_cover(top, low, n, b, h, tol):
         if d > tol:
             out.append((i, round(d, 3)))
     return (max((d for _, d in out), default=0.0)), out
+
+
+def _steps_inside(top, low, n, b, h, tol):
+    """Whole saw-tooth against the stringer strip (top / lower edge as ((x1, z1), (x2, z2)), real mm): the nosings N_i = (i b, (i+1) h), i = 0..n-1, must not stand above the top
+    edge and the feet F_i = ((i-1) b, (i-1) h), i = 1..n, must not hang below the lower edge (left of the start of a lower edge cut at the floor it is z = 0).
+    Returns (worst nosing above the top edge, worst foot below the lower edge, [(kind, i, amount)]), amounts in mm."""
+    (xt1, zt1), (xt2, zt2) = top
+    (xl1, zl1), (xl2, zl2) = low
+    zt = lambda x: zt1 + (zt2 - zt1) * (x - xt1) / (xt2 - xt1)
+    zl = lambda x: 0.0 if x < min(xl1, xl2) - 1e-9 else zl1 + (zl2 - zl1) * (x - xl1) / (xl2 - xl1)
+    bad, wn, wf = [], 0.0, 0.0
+    for i in range(n):
+        d = (i + 1) * h - zt(i * b)                  # nosing above the top edge
+        wn = max(wn, d)
+        if d > tol:
+            bad.append(("mũi", i, round(d, 3)))
+    for i in range(1, n + 1):
+        d = zl((i - 1) * b) - (i - 1) * h                      # foot below the lower edge
+        wf = max(wf, d)
+        if d > tol:
+            bad.append(("chân", i, round(d, 3)))
+    return wn, wf, bad
+
+
+def _shallow_info(sp):
+    """(is_deep, text) of the stringer against the steps: deep = o >= h (vertical depth o = bd / cos theta), the strip then holds the whole saw-tooth."""
+    n, H, b = sp["so_bac"], sp["cao_tang"], sp["b"]
+    h = H / n
+    bd, bw, t = sp["dam_con"]["bd"], sp["dam_con"]["bw"], sp["dam_con"]["t"]
+    need = h * b / math.hypot(b, h)
+    o = bd * math.hypot(b, h) / b
+    z = math.ceil(need / 10 - 1e-9) * 10
+    return o >= h - 1e-9, (f"dầm cao {bd:g} mm (đứng {o:.1f} mm) không che trọn bậc: mũi bậc nhô {h - o:.1f} mm trên mép trên dầm, chân bậc vẫn nằm trên mép dưới (dải đã hạ); "
+                           f"cần >= {need:.1f} mm vuông góc (gợi ý H{bw:g}x{z:g}x{t:g})")
+
+
+def check_steps_inside_a(C: Checks, D, sp):
+    """1.25: the whole saw-tooth lies inside the stringer strip (nosings not above the top edge, feet not below the lower edge) when the stringer is at least one riser deep;
+    a shallower stringer (o < h) is NOT an error: INFO with the soft warning (the strip is lowered by h - o so the feet are still covered, see 1.24)."""
+    s = D.view_scale("section")
+    ox, oy = D.meta["section_origin"]
+    R = lambda p: ((p[0] - ox) * s, (p[1] - oy) * s)
+    n, H, b = sp["so_bac"], sp["cao_tang"], sp["b"]
+    h = H / n
+    top = [p for p in D.prims if p.tag == "stringer_top"]
+    low = [p for p in D.prims if p.tag == "stringer_low"]
+    deep, msg = _shallow_info(sp)
+    if len(top) != 1 or len(low) != 1:
+        C.add(1, "1.25", "bậc nằm trọn trong dải dầm cốn", False, "không có đúng một mép trên và một mép dưới dầm cốn")
+        return
+    wn, wf, bad = _steps_inside(top=(R(top[0].p1), R(top[0].p2)), low=(R(low[0].p1), R(low[0].p2)), n=n, b=b, h=h, tol=TOL)
+    if deep:
+        C.add(1, "1.25", "bậc nằm trọn trong dải dầm cốn: mọi mũi bậc không cao hơn mép trên dầm, mọi chân bậc không thấp hơn mép dưới dầm (dầm cao hơn một bậc)", not bad,
+              f"{n} mũi + {n} chân bậc; mũi nhô trên mép trên tối đa {max(wn, 0.0):.6f} mm, chân nhô dưới mép dưới tối đa {max(wf, 0.0):.6f} mm; vi phạm: {bad[:3]}")
+    else:
+        C.info(1, "1.25", "bậc nằm trọn trong dải dầm cốn (dầm quá nông: không phải lỗi, chỉ cảnh báo)", f"{msg}; đo: mũi nhô {wn:.3f} mm, chân nhô {max(wf, 0.0):.3f} mm")
 
 
 def check_stringer_covers_a(C: Checks, D, sp):
@@ -455,6 +512,17 @@ def check_dxf_a(C: Checks, D, sp, dx):
         ok15 = not bad
         d15 = f"{n} chân bậc; lòi ra khỏi dầm lớn nhất {worst:.3f} mm; chân lòi ra: {bad[:3]}"
     C.add(2, "2.15", "DXF (mm thật): hai mép dầm cốn che hết mọi chân bậc ((i−1)b, (i−1)h): không chân nào lòi ra dưới mép dưới hoặc trên mép trên", ok15, d15)
+    # 2.16: the whole saw-tooth (nosings and feet) inside the strip, real mm; a stringer shallower than one riser only gives INFO (see 1.25)
+    deep16, msg16 = _shallow_info(sp)
+    if len(slope) == 2:
+        wn16, wf16, bad16 = _steps_inside(ends[0], ends[1], n, b, h, 1e-6)
+        if deep16:
+            C.add(2, "2.16", "DXF (mm thật): bậc nằm trọn trong dải dầm (mọi mũi bậc không cao hơn mép trên, mọi chân bậc không thấp hơn mép dưới; dầm cao hơn một bậc)", not bad16,
+                  f"{n} mũi + {n} chân bậc; mũi nhô trên mép trên tối đa {max(wn16, 0.0):.6f} mm, chân nhô dưới mép dưới tối đa {max(wf16, 0.0):.6f} mm; vi phạm: {bad16[:3]}")
+        else:
+            C.info(2, "2.16", "DXF (mm thật): bậc nằm trọn trong dải dầm (dầm quá nông: chỉ cảnh báo)", f"{msg16}; đo: mũi nhô {wn16:.3f} mm, chân nhô {max(wf16, 0.0):.3f} mm")
+    else:
+        C.add(2, "2.16", "DXF (mm thật): bậc nằm trọn trong dải dầm", False, f"{len(slope)} đoạn dầm cốn nghiêng trên NET-CHINH (cần 2)")
     polys = [e for e in dx["ents"] if e["type"] == "LWPOLYLINE" and e["layer"] == "NET-CHINH"]
     plan = []
     for e in polys:

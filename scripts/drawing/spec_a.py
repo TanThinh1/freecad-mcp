@@ -1,7 +1,7 @@
 """Spec schema + input validation for drawing type A (single-flight straight steel stair, 2D plan + longitudinal section).
 
 Parameters: cao_tang (mm, floor-to-floor), so_bac (number of risers), be_rong_mat_bac b, be_rong_ve w, chieu_day_tam (plate
-thickness, default 3), dam_con (box stringer, e.g. "H60x120x2" = width 60 x depth 120 x wall 2, mm), ty_le, khung_ten.
+thickness, default 3), dam_con (box stringer, default "H75x150x2" = width 75 x depth 150 x wall 2, mm), ty_le, khung_ten.
 Layout options: bo_cuc ("auto" | "chong" | "ngang") and ty_le_rieng (true: with ty_le "auto" the plan may use a smaller scale than the
 section; an explicit ty_le is one common scale for both views).
 The riser height h = cao_tang / so_bac may be non-integer; it is never rounded in geometry (verification tolerance 1e-6 mm).
@@ -31,7 +31,7 @@ BO_CUC = ("auto", "chong", "ngang")      # sheet arrangement: automatic, plan be
 
 
 def parse_stringer(text):
-    """'H60x120x2' / 'hộp 60x120x2' -> dict(bw, bd, t, text) (width, depth, wall in mm) or None."""
+    """'H75x150x2' / 'hộp 75x150x2' -> dict(bw, bd, t, text) (width, depth, wall in mm) or None."""
     n = r"(\d+(?:\.\d+)?)"
     sep = r"\s*[xX×]\s*"
     m = re.fullmatch(rf"(?:H|hộp|hop|RHS|SHS)?\s*{n}{sep}{n}{sep}{n}", str(text).strip().replace(",", "."), re.I)
@@ -70,7 +70,7 @@ def validate(spec) -> dict:
         t = None
     ds = parse_stringer(spec.get("dam_con", "")) if "dam_con" in spec else None
     if ds is None:
-        errors.append(f"dam_con = {spec.get('dam_con')!r} không đọc được. Dạng hợp lệ: H60x120x2 (rộng x cao x dày thành, mm).")
+        errors.append(f"dam_con = {spec.get('dam_con')!r} không đọc được. Dạng hợp lệ: H75x150x2 (rộng x cao x dày thành, mm).")
     elif w and 2 * ds["bw"] >= w:
         errors.append(f"dam_con rộng {ds['bw']:g} mm: hai dầm cốn ({2 * ds['bw']:g} mm) không nhỏ hơn bề rộng vế be_rong_ve = {w:g} mm.")
     ty_le, scale = parse_scale(spec.get("ty_le", "auto"), errors)
@@ -94,5 +94,10 @@ def validate(spec) -> dict:
     if not (params["nguong_2hb_min"] <= two_h_b <= params["nguong_2hb_max"]):
         warnings.append(f"2h + b = {two_h_b:.1f} mm nằm ngoài khoảng {params['nguong_2hb_min']:g}-{params['nguong_2hb_max']:g} mm: ngoài khoảng thường dùng, "
                         f"cần người thiết kế xác nhận. (Quy tắc kinh nghiệm thông dụng, KHÔNG phải điều khoản TCVN đã xác minh; ngưỡng đổi được qua tham_so.)")
+    need_bd = h * b / math.hypot(b, h)              # perpendicular depth a stringer needs to hold the whole saw-tooth (nosings and feet): h cos(theta)
+    if ds["bd"] < need_bd - 1e-9:
+        z = math.ceil(need_bd / 10 - 1e-9) * 10
+        warnings.append(f"dầm cao {ds['bd']:g} mm không che trọn bậc, cần >= {need_bd:.1f} mm vuông góc (gợi ý H{ds['bw']:g}x{z:g}x{ds['t']:g}). "
+                        f"Bản vẽ vẫn che hết chân bậc (dải dầm được hạ xuống) nhưng mũi bậc nhô lên khỏi mép trên dầm {h - ds['bd'] * math.hypot(b, h) / b:.1f} mm.")
     return dict(loai="A", ten=ten, cao_tang=H, so_bac=n, b=b, w=w, t=float(t), dam_con=ds, ty_le=ty_le, scale=scale, bo_cuc=bo_cuc, ty_le_rieng=rieng, khung_ten=kt, params=params,
                 h=h, L=(n - 1) * b, n_treads=n - 1, theta_deg=math.degrees(math.atan2(h, b)), two_h_b=two_h_b, warnings=warnings)
