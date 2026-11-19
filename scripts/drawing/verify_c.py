@@ -22,6 +22,10 @@ SCALES_C = (20, 50, 100, 200, 500)
 TITLE = "MẶT CẮT NGANG KHUNG"
 OUTLINE_TAGS = ("col_edge", "raf_edge", "joint_step")
 EXP_LAYER = {"col_edge": "COT", "raf_edge": "KEO", "joint_step": "KEO"}
+# top level symbol and extension lines (paper mm): the symbol tip stands LEVEL_GAP_MIN..MAX above the ridge, within LEVEL_MAX_DX of its x, no further than LEVEL_MAX_DIST from it;
+# a horizontal extension line (any horizontal KICH-THUOC line at or above the ground) is at most EXT_MAX_LEN long and ends no further than EXT_MAX_FROM_A right of axis A
+LEVEL_GAP_MIN, LEVEL_GAP_MAX, LEVEL_MAX_DX, LEVEL_MAX_DIST = 5.0, 8.0, 1.0, 10.0
+EXT_MAX_LEN, EXT_MAX_FROM_A = 30.0, 25.0
 
 
 # ------------------------------------------------------------------ exact helpers
@@ -299,6 +303,27 @@ def compare_segments(expected, drawn, tol):
 
 
 # ------------------------------------------------------------------ sheet <-> real
+def _apex(exp_seg):
+    """The ridge: x (mean of the highest outline points) and y of the highest point of the expected outline, real mm."""
+    ym = max(max(a[1], b[1]) for a, b in exp_seg)
+    pts = [pt for a, b in exp_seg for pt in (a, b) if pt[1] >= ym - 1e-9]
+    return sum(p[0] for p in pts) / len(pts), ym
+
+
+def _long_ext(segs, scale, tol=1e-6):
+    """Horizontal extension lines (horizontal KICH-THUOC lines at or above the ground, real mm; the span dimension line lies below the ground) that are longer than EXT_MAX_LEN
+    or end more than EXT_MAX_FROM_A right of axis A (paper mm): [(length, right end x from A)]; also returns how many horizontal lines were examined."""
+    bad, n = [], 0
+    for a, b in segs:
+        if abs(a[1] - b[1]) > tol or min(a[1], b[1]) < -tol:
+            continue
+        n += 1
+        ln, xr = abs(b[0] - a[0]) / scale, max(a[0], b[0]) / scale
+        if ln > EXT_MAX_LEN + 1e-6 or xr > EXT_MAX_FROM_A + 1e-6:
+            bad.append((round(ln, 2), round(xr, 2)))
+    return bad, n
+
+
 def _tools(D):
     ox, oy = D.origin
     s = D.scale
@@ -544,9 +569,10 @@ def check_primitives_c(C: Checks, D, sp):
     # ---- 1.10 levels
     lv = [p for p in by("level_line") if isinstance(p, Line)]
     lys = sorted(round(R(p.p1)[1], 6) for p in lv)
-    want_y = sorted({0.0, round(H, 6), round(T, 6)})
-    # +0.000 is marked on the (thick) ground line itself: a NET-TAM level line at y = 0 is allowed but not required; +cao_cot and +cao đỉnh need their own line
-    lv_ok = {round(H, 6), round(T, 6)} <= set(lys) <= set(want_y) and len(lys) == len(set(lys)) and all(close(R(p.p1)[1], R(p.p2)[1], TOL) and p.layer == "NET-TAM" for p in lv)
+    want_y = sorted({0.0, round(H, 6)})
+    # +0.000 is marked on the (thick) ground line itself: a NET-TAM level line at y = 0 is allowed but not required; +cao_cot needs its own line; the top level has NO datum line:
+    # its symbol stands at the ridge on a short leader (checked by 1.20)
+    lv_ok = {round(H, 6)} <= set(lys) <= set(want_y) and len(lys) == len(set(lys)) and all(close(R(p.p1)[1], R(p.p2)[1], TOL) and p.layer == "NET-TAM" for p in lv)
     texts = sorted(p.s for p in by("level_text"))
     want_t = sorted({"+0.000", lvl_text(H), lvl_text(X["top_fr"])})
     txt_ok = texts == want_t and all(p.layer == "CHU" for p in by("level_text", "level_tri", "level_bar"))
@@ -554,16 +580,51 @@ def check_primitives_c(C: Checks, D, sp):
     near_ok = True
     pair_bad = []
     lvl_tol = 3.0 + 0.8 + 1.0          # the text baseline sits 3 (triangle) + 0.8 mm above its level; any other level is >= 3 mm farther unless staggered (suy luận: layout rule of the builder)
+    top_tx = [p for p in by("level_text") if p.s == lvl_text(X["top_fr"])]
     for yv, want_s in [(0.0, "+0.000"), (H, lvl_text(H)), (T, lvl_text(X["top_fr"]))]:
-        ysh = D.origin[1] + float(yv) / s
+        if yv == T and top_tx:
+            ysh = top_tx[0].pos[1] - 3.8              # the top level has no datum line: its tip is where its own text says (the position against the ridge is checked by 1.20)
+        else:
+            ysh = D.origin[1] + float(yv) / s
         sym = [p for p in by("level_tri", "level_bar") if prim_bbox(p)[1] - 1e-6 <= ysh <= prim_bbox(p)[3] + 1e-6]
         tx = [p for p in by("level_text") if abs(p.pos[1] - (ysh + 3.0 + 0.8)) <= 0.05]       # the text of THIS level: baseline exactly 3.8 mm above the datum
         near_ok &= bool(sym) and len(tx) >= 1
         if not any(p.s == want_s for p in tx):
             pair_bad.append((want_s, [p.s for p in tx]))
     near_ok &= not pair_bad
-    C.add(1, "1.10", "cao độ: đường NET-TAM tại y = cao_cột và cao đỉnh (mức 0 là đường đất); chữ +0.000 / +cao_cột / +cao đỉnh (3 số lẻ, làm tròn nửa lên); mỗi mức có ký hiệu và chữ gần đường", lv_ok and txt_ok and near_ok,
+    C.add(1, "1.10", "cao độ: đường NET-TAM tại y = cao_cột (mức 0 là đường đất; cao đỉnh không có đường chuẩn, ký hiệu ở đỉnh nóc); chữ +0.000 / +cao_cột / +cao đỉnh (3 số lẻ, làm tròn nửa lên); mỗi mức có ký hiệu và chữ gần đường", lv_ok and txt_ok and near_ok,
           f"y đường {lys} (cần {want_y}); chữ {texts} (cần {want_t}); ký hiệu/chữ gần đường và đúng chữ của từng mức: {near_ok}; chữ gắn nhầm mức: {pair_bad}")
+
+    # ---- 1.20 the top level symbol stands at the ridge (tip 5-8 mm above the highest point, same x, short leader); +0.000 and the eave level stay beside axis B
+    x_ap, y_ap = _apex(exp_seg)
+    x_lo, x_hi = min(min(a[0], b[0]) for a, b in exp_seg), max(max(a[0], b[0]) for a, b in exp_seg)
+    ok20, d20 = False, f"{len(top_tx)} chữ cao độ đỉnh (cần 1)"
+    if len(top_tx) == 1:
+        t_ = top_tx[0]
+        tip = (t_.pos[0] + 1.0, t_.pos[1] - 3.8)                 # the text starts 1 mm left of the symbol tip and its baseline is 3.8 mm above it
+        tri = [p for p in by("level_tri") if close(p.p1[0], tip[0], 1e-6) and close(p.p1[1], tip[1], 1e-6)]
+        ld = [p for p in by("level_leader") if isinstance(p, Line)]
+        tr_ = R(tip)
+        dx_, gap_ = abs(tr_[0] - x_ap) / s, (tr_[1] - y_ap) / s
+        dist_ = math.hypot(dx_, gap_)
+        ld_ok = (len(ld) == 1 and ld[0].layer == "NET-MANH" and close(R(ld[0].p1)[0], x_ap, TOL) and close(R(ld[0].p1)[1], y_ap, TOL)
+                 and close(ld[0].p2[0], tip[0], 1e-6) and close(ld[0].p2[1], tip[1], 1e-6))
+        in_x = x_lo - TOL <= tr_[0] <= x_hi + TOL
+        near_b = True
+        for s_txt in ("+0.000", lvl_text(H)):                     # these two symbols stay at axis B (their tips lie right of the axis)
+            for tb in [p for p in by("level_text") if p.s == s_txt]:
+                near_b &= R((tb.pos[0] + 1.0, 0.0))[0] >= n - TOL
+        ok20 = len(tri) == 2 and in_x and dx_ <= LEVEL_MAX_DX and LEVEL_GAP_MIN <= gap_ <= LEVEL_GAP_MAX and dist_ <= LEVEL_MAX_DIST and ld_ok and near_b
+        d20 = (f"đỉnh nóc ({x_ap:.1f}; {y_ap:.1f}) mm thật; mũi ký hiệu ({tr_[0]:.1f}; {tr_[1]:.1f}): lệch x {dx_:.2f} mm giấy (≤ {LEVEL_MAX_DX:g}), cao hơn đỉnh {gap_:.2f} mm giấy "
+               f"({LEVEL_GAP_MIN:g}-{LEVEL_GAP_MAX:g}), cách đỉnh {dist_:.2f} mm (≤ {LEVEL_MAX_DIST:g}); trong khoảng x của mái {in_x}; {len(tri)} nét tam giác; đường dẫn {ld_ok}; "
+               f"+0.000 và +cao_cột bên phải trục B {near_b}")
+    C.add(1, "1.20", "ký hiệu cao độ đỉnh nằm ở đỉnh nóc (trong khoảng x của mái, mũi cao hơn đỉnh 5-8 mm giấy, ≤ 10 mm cách đỉnh) nối với đỉnh bằng đường dẫn ngắn NET-MANH; +0.000 và +cao_cột giữ ở trục B", ok20, d20)
+
+    # ---- 1.21 no long horizontal extension line (a thin line must not run across the empty frame to the ridge)
+    hz = [(R(p.p1), R(p.p2)) for p in D.prims if isinstance(p, Line) and not p.sheet and p.layer == "KICH-THUOC"]
+    bad21, n21 = _long_ext(hz, s)
+    C.add(1, "1.21", f"đường gióng ngang (nét ngang lớp KICH-THUOC từ đường đất trở lên) ngắn: mỗi nét dài ≤ {EXT_MAX_LEN:g} mm giấy và đầu phải cách trục A ≤ {EXT_MAX_FROM_A:g} mm giấy",
+          bool(n21) and not bad21, f"{n21} nét ngang; quá dài / kéo xa (dài, đầu phải cách A) mm giấy: {bad21[:3]}")
 
     # ---- 1.11 dimensions
     exp_dims = [("h", n, (0.0, n), "span"), ("v", H, (0.0, H), "cao_cot"), ("v", T, (0.0, T), "top"), ("v", X["rise"], (H, T), "rise")]
@@ -765,7 +826,7 @@ def check_dxf_c(C: Checks, D, sp, dx):
             lay_bad.append((tag, cls, tuple(round(v, 1) for v in (*a, *b))))
     out_ok = not cmp_["extra"] and not cmp_["missing"] and not cmp_["dup"] and not lay_bad
     lv = [g for g in lines.get("NET-TAM", [])]
-    want_y = sorted({0.0, round(H, 6), round(T, 6)})
+    want_y = sorted({0.0, round(H, 6)})                # the top level has no datum line (its symbol stands at the ridge: 2.18)
     lv_h = sorted(round(g[0][1], 6) for g in lv if close(g[0][1], g[1][1], 1e-6))
     member_axes = [g for g in lv if not close(g[0][1], g[1][1], 1e-6)]
     ma_ok = not member_axes
@@ -774,7 +835,7 @@ def check_dxf_c(C: Checks, D, sp, dx):
         for a, b in nodes_of(X):
             d = _unit((b[0] - a[0], b[1] - a[1]))
             ma_ok &= any(abs(_cross(d, _unit((g[1][0] - g[0][0], g[1][1] - g[0][1])))) < 1e-9 and _on_seg(g[0], a, b)[1] <= TOL_DXF and _on_seg(g[1], a, b)[1] <= TOL_DXF for g in member_axes)
-    lv_ok = {round(H, 6), round(T, 6)} <= set(lv_h) <= set(want_y) and len(lv_h) == len(set(lv_h)) and ma_ok and dx["layers"].get("NET-TAM", {}).get("ltype") == "CENTER"
+    lv_ok = {round(H, 6)} <= set(lv_h) <= set(want_y) and len(lv_h) == len(set(lv_h)) and ma_ok and dx["layers"].get("NET-TAM", {}).get("ltype") == "CENTER"
     dl = lines.get("KICH-THUOC", [])
     dim_exp = [("h", 0.0, n), ("v", 0.0, H), ("v", 0.0, T), ("v", H, T)]
     dim_found = []
@@ -804,7 +865,7 @@ def check_dxf_c(C: Checks, D, sp, dx):
         if e["type"] == "TEXT" and re.fullmatch(r"\+\d+\.\d{3}", unesc_(e)):
             r_ = e["rec"]
             lvl_pos.append((unesc_(e), (f(r_, 21) if 21 in r_ else f(r_, 20))))
-    lvl_pair_ok = all(any(t_ == w_ and abs(y_ - (float(lv_) + 3.8 * D.scale)) <= 1e-3 for t_, y_ in lvl_pos) for lv_, w_ in [(0.0, "+0.000"), (H, lvl_text_(H)), (X["top_fr"], lvl_text_(X["top_fr"]))])
+    lvl_pair_ok = all(any(t_ == w_ and abs(y_ - (float(lv_) + 3.8 * D.scale)) <= 1e-3 for t_, y_ in lvl_pos) for lv_, w_ in [(0.0, "+0.000"), (H, lvl_text_(H))]) and any(t_ == lvl_text_(X["top_fr"]) for t_, _ in lvl_pos)
     pct, ang = percent_str(sp["do_doc_mai"]), f"{X['theta_deg']:.1f}".replace(".", ",")
     slope = [t for lay, t in txt if t.startswith("i = ")]
     slope_ok = len(slope) == len(nodes_of(X)) and all(t == f"i = {pct}% ({ang}°)" for t in slope)          # one text per rafter
@@ -835,6 +896,29 @@ def check_dxf_c(C: Checks, D, sp, dx):
     sc_ok = scn == [f"TỶ LỆ 1:{D.scale}"] and all(t == f"1:{D.scale}" for t in plain)
     note_ok = sum(1 for lay, t in txt if t == LEVEL_NOTE) == 1
     ti = [t for lay, t in txt if t == TITLE]          # the view title (+ the same words in the title-block cell 3 when khung_ten.ten_ban_ve says so)
+    # ---- 2.18 top level symbol at the ridge (real mm), 2.19 no long horizontal extension line
+    x_ap, y_ap = _apex(exp_seg)
+    x_lo, x_hi = min(min(a[0], b[0]) for a, b in exp_seg), max(max(a[0], b[0]) for a, b in exp_seg)
+    scl = D.scale
+    top_e = [e for e in dx["ents"] if e["type"] == "TEXT" and unesc_(e) == lvl_text_(X["top_fr"])]
+    ok18, d18 = False, f"{len(top_e)} chữ cao độ đỉnh (cần 1)"
+    if len(top_e) == 1:
+        r_ = top_e[0]["rec"]
+        tx_, ty_ = (f(r_, 10), f(r_, 20))
+        tip = (tx_ + 1.0 * scl, ty_ - 3.8 * scl)
+        dx_, gap_ = abs(tip[0] - x_ap) / scl, (tip[1] - y_ap) / scl
+        dist_ = math.hypot(dx_, gap_)
+        ld = [g for g in lines.get("NET-MANH", []) if close(g[0][0], x_ap, TOL_DXF) and close(g[1][0], x_ap, TOL_DXF) and max(g[0][1], g[1][1]) > y_ap - TOL_DXF and min(g[0][1], g[1][1]) < y_ap + TOL_DXF + 1.0 * scl]
+        ld_ok = len(ld) == 1 and close(ld[0][0][0], x_ap, TOL_DXF) and close(ld[0][0][1], y_ap, TOL_DXF) and close(ld[0][1][0], tip[0], TOL_DXF) and close(ld[0][1][1], tip[1], TOL_DXF)
+        in_x = x_lo - TOL_DXF <= tip[0] <= x_hi + TOL_DXF
+        ok18 = in_x and dx_ <= LEVEL_MAX_DX and LEVEL_GAP_MIN <= gap_ <= LEVEL_GAP_MAX and dist_ <= LEVEL_MAX_DIST and ld_ok
+        d18 = (f"mũi ký hiệu ({tip[0]:.1f}; {tip[1]:.1f}) mm thật, đỉnh nóc ({x_ap:.1f}; {y_ap:.1f}): lệch x {dx_:.2f} mm giấy, cao hơn đỉnh {gap_:.2f} mm giấy, cách đỉnh {dist_:.2f} mm; "
+               f"trong khoảng x của mái {in_x}; đường dẫn NET-MANH nối đỉnh với mũi {ld_ok}")
+    C.add(2, "2.18", "DXF (mm thật): ký hiệu cao độ đỉnh ở đỉnh nóc (trong khoảng x của mái, mũi cao hơn đỉnh 5-8 mm giấy, ≤ 10 mm cách đỉnh) nối với đỉnh bằng đường dẫn ngắn", ok18, d18)
+    hz_d = [(g[0], g[1]) for g in lines.get("KICH-THUOC", [])]
+    bad19, n19 = _long_ext(hz_d, scl, TOL_DXF)
+    C.add(2, "2.19", f"DXF: đường gióng ngang (nét ngang lớp KICH-THUOC từ đường đất trở lên) mỗi nét dài ≤ {EXT_MAX_LEN:g} mm giấy và đầu phải cách trục A ≤ {EXT_MAX_FROM_A:g} mm giấy", bool(n19) and not bad19,
+          f"{n19} nét ngang; quá dài / kéo xa (mm giấy): {bad19[:3]}")
     C.add(2, "2.8", "DXF: chữ kích thước (nhịp, cao_cột, cao đỉnh, nhô — làm tròn nửa lên), cao độ +0.000/+cao_cột/+cao đỉnh, chữ độ dốc, nhãn tiết diện, A/B, tên hình và tỷ lệ",
           dim_txt == want_dim and lvl_txt == want_lvl and lvl_pair_ok and slope_ok and lab_ok and ab == ["A", "B"] and sc_ok and note_ok and len(ti) >= 1,
           f"kích thước {dim_txt} (cần {want_dim}); cao độ {lvl_txt} (cần {want_lvl}; mỗi chữ đúng mức: {lvl_pair_ok}); độ dốc {slope}; nhãn {labs}; A/B {ab}; tên hình {len(ti)}; tỷ lệ {sc_ok}; ghi chú cao độ đúng 1 chữ {note_ok}")

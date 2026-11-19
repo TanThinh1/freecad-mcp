@@ -146,11 +146,77 @@ def main():
     for dy, tag in ((1.0, "1mm"), (0.5, "0.5mm_near_miss")):
         add(f"wrong_top_height_ridge_up_{tag}", "c1", lambda D, dy=dy: move_vertex(D, lambda r: abs(r[0] - 6000.0) < 1e-6, 0.0, dy), {"1.2", "1.6"}, {"2.7"})
     add("wrong_top_height_ridge_up_1mm_c3_one_roof_high_node", "c3", lambda D: move_vertex(D, lambda r: abs(r[0] - 24000.0) < 300.0 and r[1] > 8000.0, 0.0, 1.0), {"1.2", "1.6", "1.7"}, {"2.7"})
-    def top_level_line_up(D, dy):
-        lv = max(by_tag(D, "level_line"), key=lambda p: p.p1[1])
-        shift_prim(D, lv, 0.0, dy)
-    add("wrong_top_level_line_up_1mm", "c1", lambda D: top_level_line_up(D, 1.0), {"1.10"}, {"2.7"})
-    add("wrong_top_level_line_up_0.5mm_near_miss", "c1", lambda D: top_level_line_up(D, 0.5), {"1.10"}, {"2.7"})
+    # the top level has no datum line any more: its symbol stands at the ridge on a short leader (1.20 / 2.18); a symbol part moved off its own tip is an error
+    def top_level_text_up(D, dy):
+        shift_prim(D, [p for p in by_tag(D, "level_text") if p.s == "+6.900"][0], 0.0, dy)
+    add("wrong_top_level_text_up_1mm", "c1", lambda D: top_level_text_up(D, 1.0), {"1.20"}, {"2.18"})
+    add("wrong_top_level_text_up_0.5mm_near_miss", "c1", lambda D: top_level_text_up(D, 0.5), {"1.20"}, {"2.18"})
+    def eave_level_line_up(D, dy):
+        shift_prim(D, [p for p in by_tag(D, "level_line") if abs(real(D, p.p1)[1] - 6000.0) < 1e-6][0], 0.0, dy)
+    add("wrong_eave_level_line_up_1mm", "c1", lambda D: eave_level_line_up(D, 1.0), {"1.10"}, {"2.7"})
+    add("wrong_eave_level_line_up_0.5mm_near_miss", "c1", lambda D: eave_level_line_up(D, 0.5), {"1.10"}, {"2.7"})
+
+    # ---- top level symbol at the ridge (1.20 / 2.18) and short extension lines (1.21 / 2.19)
+    def top_symbol_parts(D):
+        txt = [p for p in by_tag(D, "level_text") if p.s == "+6.900"][0]
+        tip_x, tip_y = txt.pos[0] + 1.0, txt.pos[1] - 3.8
+        parts = [p for p in D.prims if p.tag in ("level_tri", "level_bar") and abs(p.p1[1] - tip_y) < 3.2 and abs(p.p1[0] - tip_x) < 20.0] + [txt] + by_tag(D, "level_note")
+        return parts
+
+    def symbol_at_axis_B(D):                      # the old layout: the symbol beside axis B, no leader at the ridge
+        for p in top_symbol_parts(D):
+            shift_prim(D, p, 6000.0, 0.0)
+        D.prims.remove(by_tag(D, "level_leader")[0])
+    add("top_level_symbol_placed_at_axis_B_instead_of_the_ridge", "c1", symbol_at_axis_B, {"1.20"}, {"2.18"})
+
+    def symbol_moved_sideways(D):                 # symbol and leader end moved 30 mm (real 1500) along x: still at the roof's height but not at the ridge
+        for p in top_symbol_parts(D):
+            shift_prim(D, p, 1500.0, 0.0)
+        ld = by_tag(D, "level_leader")[0]
+        ld.p2 = (ld.p2[0] + 1500.0 / D.scale, ld.p2[1])
+    add("top_level_symbol_30mm_away_from_the_ridge", "c1", symbol_moved_sideways, {"1.20"}, {"2.18"})
+
+    def symbol_too_high(D):                       # 3 mm higher: 9 mm above the ridge (limit 8)
+        for p in top_symbol_parts(D):
+            shift_prim(D, p, 0.0, 3.0 * D.scale)
+        ld = by_tag(D, "level_leader")[0]
+        ld.p2 = (ld.p2[0], ld.p2[1] + 3.0)
+    add("top_level_symbol_9mm_above_the_ridge", "c1", symbol_too_high, {"1.20"}, {"2.18"})
+
+    def symbol_too_low(D):                        # 2.5 mm lower: 3.5 mm above the ridge (limit 5)
+        for p in top_symbol_parts(D):
+            shift_prim(D, p, 0.0, -2.5 * D.scale)
+        ld = by_tag(D, "level_leader")[0]
+        ld.p2 = (ld.p2[0], ld.p2[1] - 2.5)
+    add("top_level_symbol_3.5mm_above_the_ridge", "c1", symbol_too_low, {"1.20"}, {"2.18"})
+
+    def leader_deleted(D):
+        D.prims.remove(by_tag(D, "level_leader")[0])
+    add("top_level_leader_deleted", "c1", leader_deleted, {"1.20"}, {"2.18"})
+
+    def leader_off_the_ridge(D):
+        ld = by_tag(D, "level_leader")[0]
+        ld.p1 = (ld.p1[0], ld.p1[1] + 1.0)
+    add("top_level_leader_does_not_reach_the_ridge_1mm", "c1", leader_off_the_ridge, {"1.20"}, {"2.18"})
+
+    def top_ext(D):
+        e = [p for p in by_tag(D, "dim_ext_custom")]
+        return max(e, key=lambda p: p.p1[1])
+
+    def ext_to_the_ridge(D):                      # the old layout: the thin line runs from the dimension all the way to the ridge
+        e = top_ext(D)
+        e.p1 = (D.origin[0] + 6000.0 / D.scale - 1.0, e.p1[1])
+    add("top_extension_line_runs_to_the_ridge", "c1", ext_to_the_ridge, {"1.21"}, {"2.19"})
+
+    def ext_40mm(D):                              # still short of the ridge but 20 mm longer than allowed
+        e = top_ext(D)
+        e.p1 = (e.p1[0] + 20.0, e.p1[1])
+    add("top_extension_line_20mm_too_long", "c1", ext_40mm, {"1.21"}, {"2.19"})
+
+    def ext_long_at_eave(D):
+        e = [p for p in by_tag(D, "dim_ext_custom") if abs(real(D, p.p1)[1] - 6000.0) < 1e-6][0]
+        e.p1 = (e.p1[0] + 40.0, e.p1[1])
+    add("eave_extension_line_40mm_too_long", "c1", ext_long_at_eave, {"1.21"}, {"2.19"})
     def top_dim_wrong(D):
         for p in D.prims:
             if p.tag.endswith("_line") and p.tag.startswith("dim_") and abs(real(D, p.p2)[1] - 6900.0) < 1e-6:
@@ -188,11 +254,11 @@ def main():
     def note_dup(D):
         D.prims.append(copy.deepcopy(by_tag(D, "level_note")[0]))
     add("level_note_duplicated", "c1", note_dup, {"1.19"}, {"2.8"})
-    def note_on_level_line(D):
+    def note_on_leader(D):
         n_ = by_tag(D, "level_note")[0]
-        lv = max(by_tag(D, "level_line"), key=lambda p: p.p1[1])
-        n_.pos = (n_.pos[0], lv.p1[1] - 0.6)              # baseline just under the top datum line: the box crosses the line
-    add("level_note_over_level_line", "c1", note_on_level_line, {"1.19"}, None)
+        ld = by_tag(D, "level_leader")[0]
+        n_.pos = (n_.pos[0], (ld.p1[1] + ld.p2[1]) / 2 - 0.6)              # baseline just under the middle of the ridge leader: the box crosses the leader
+    add("level_note_over_the_ridge_leader", "c1", note_on_leader, {"1.19"}, None)
     def note_small(D):
         by_tag(D, "level_note")[0].h = 1.8
     add("level_note_wrong_height_1.8", "c1", note_small, {"1.19"}, None)

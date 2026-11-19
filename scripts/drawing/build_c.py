@@ -30,6 +30,7 @@ LEVEL_NOTE = "CAO ĐỘ TÍNH THEO GIAO ĐIỂM TRỤC"       # printed above th
 SHEET_SCALE_LIMIT = 100          # A2 / A1 are used only when A3 does not hold the drawing at 1:100 or finer
 DEFAULT_SHEET_NO = "KC-02"       # drawing number used when khung_ten.ky_hieu_ban_ve is empty
 SYMBOL_BAR, SYMBOL_TRI = 19.0, 3.0          # level symbol (paper mm), same as type A
+LEVEL_GAP = 6.0                             # the top level symbol stands this far (paper mm) above the ridge, joined to it by a short leader
 
 
 # ---------------------------------------------------------------- geometry in real mm (analytic line intersections)
@@ -128,24 +129,26 @@ def layout(sp: dict, s: int):
     lx2 = lx1 - P["kt_giua_cac_duong"]
     y_cot, y_top = X(H), X(sp["y_top"])
     sin_t = math.sin(th)
-    d_exit = hr / (2.0 * sin_t)          # distance from the top node along x to where y = y_top leaves the rafter's upper edge (may exceed the member for shallow slopes)
-    x_node_top = nodes[1][0] if sp["so_mai"] == 2 else nodes[-1][0]
-    x_top_start = X(max(x_node_top - d_exit, -hc / 2.0))          # clamped to the outer face of column A
+    apex = [pt for _, p, q in segs for pt in (p, q) if pt[1] >= ymax - 1e-9]          # the highest point(s) of the outline: the ridge (2 roofs) or the top corner at B (1 roof)
+    x_apex = sum(pt[0] for pt in apex) / len(apex)
     dims.append(Dim(kind="v", p1=(lx1, 0.0), p2=(lx1, y_cot), line_pos=lx1, value=H, ext_from=lx1, layer=LAYER_DIM, role="chain", ext_lines=False, text=fmt_value(H)))
     dims.append(Dim(kind="v", p1=(lx1, y_cot), p2=(lx1, y_top), line_pos=lx1, value=sp["rise"], ext_from=lx1, layer=LAYER_DIM, role="chain", ext_lines=False,
                     text=str(round_half_up(sp["rise_exact"]))))
     dims.append(Dim(kind="v", p1=(lx2, 0.0), p2=(lx2, y_top), line_pos=lx2, value=sp["y_top"], ext_from=lx2, layer=LAYER_DIM, role="overall", ext_lines=False,
                     text=str(round_half_up(sp["y_top_exact"]))))
-    for y, x_from, x_to in ((0.0, lx1 - exo, lx2 - exe), (y_cot, X(-hc / 2.0) - exo, lx1 - exe), (y_top, x_top_start - exo, lx2 - exe)):
+    # extension lines of the vertical dimensions: from the outer face of column A to just beyond the rulers (the top one is a short stub like the others: the level symbol at the ridge
+    # shows which point the top height belongs to, so no thin line runs across the empty frame to the ridge)
+    for y, x_from, x_to in ((0.0, lx1 - exo, lx2 - exe), (y_cot, X(-hc / 2.0) - exo, lx1 - exe), (y_top, X(-hc / 2.0) - exo, lx2 - exe)):
         add(Line(layer=LAYER_DIM, tag="dim_ext_custom", p1=(x_from, y), p2=(x_to, y)))
     # ---- level markers on the right (datum lines from the structure to the symbol)
     x_m = X(nh + hc / 2.0) + g - 4.0
     x_col_out = X(nh + hc / 2.0)
-    x_top_line = x_col_out            # the top datum starts at the outer face of column B (like the eave datum), never near the ridge, so it does not touch the roof
-    stack_h = SYMBOL_TRI + 0.8 + hb + 1.0                       # vertical room one level symbol + text needs
-    stagger = (y_top - y_cot) < stack_h                          # rise too small on paper: put the top symbol further right instead of on top of the eave one
+    # +0.000 and the eave level stay at axis B; the top level symbol stands at the ridge (x = middle of the span; 1 roof: the highest point of the roof), LEVEL_GAP above it,
+    # joined by a short leader (thin line)
+    y_tip = X(ymax) + LEVEL_GAP
+    add(Line(layer=LAYER_THIN, tag="level_leader", p1=(X(x_apex), X(ymax)), p2=(X(x_apex), y_tip)))
     for y, label, x0, xm in ((0.0, "+0.000", None, x_m), (y_cot, level_text(H), x_col_out, x_m),
-                             (y_top, level_text(sp["y_top_exact"]), x_top_line, x_m + (SYMBOL_BAR + 3.0 if stagger else 0.0))):
+                             (y_tip, level_text(sp["y_top_exact"]), None, X(x_apex))):
         if x0 is not None:
             add(Line(layer=LAYER_LEVEL, tag="level_line", p1=(x0, y), p2=(xm, y)))
         add(Line(layer=LAYER_TEXT, tag="level_tri", p1=(xm, y), p2=(xm - 1.5, y + SYMBOL_TRI)))
@@ -153,8 +156,7 @@ def layout(sp: dict, s: int):
         add(Line(layer=LAYER_TEXT, tag="level_bar", p1=(xm - 1.5, y + SYMBOL_TRI), p2=(xm - 1.5 + SYMBOL_BAR, y + SYMBOL_TRI)))
         add(Text(layer=LAYER_TEXT, tag="level_text", s=label, pos=(xm - 1.0, y + SYMBOL_TRI + 0.8), h=hb))
     cap, kn = P["cao_chu_so_lieu"], P["khoang_cach_nhan"]
-    xm_top = x_m + (SYMBOL_BAR + 3.0 if stagger else 0.0)
-    add(Text(layer=LAYER_TEXT, tag="level_note", s=LEVEL_NOTE, pos=(xm_top - 1.0, y_top + SYMBOL_TRI + 0.8 + hb + 0.9), h=cap))
+    add(Text(layer=LAYER_TEXT, tag="level_note", s=LEVEL_NOTE, pos=(X(x_apex) - 1.0, y_tip + SYMBOL_TRI + 0.8 + hb + 0.9), h=cap))
     # ---- section labels and slope texts
     add(Text(layer=LAYER_TEXT, tag="section_label", s=sp["col"]["text"], pos=(X(hc / 2.0) + kn, X(H) / 2.0), h=cap))
     add(Text(layer=LAYER_TEXT, tag="section_label", s=sp["col"]["text"], pos=(X(nh - hc / 2.0) - kn, X(H) / 2.0), h=cap, halign="right"))
