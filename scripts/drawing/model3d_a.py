@@ -29,8 +29,9 @@ try:
         treads.append(o)
     theta = math.atan2(h, b)
     off = bd / math.cos(theta)
+    shift = max(0.0, h - off)                # stringer shallower than one riser: lowered by h - off, its lower edge passes through the feet of the risers (same as the drawing)
     if h - off >= 0:
-        poly = [(0, h - off), (0, h), (L, H), (L, H - off)]
+        poly = [(0, h - off - shift), (0, h - shift), (L, H - shift), (L, H - off - shift)]
     else:
         x0 = (off - h) * b / h
         poly = [(0, 0), (0, h), (L, H), (L, H - off), (x0, 0)]

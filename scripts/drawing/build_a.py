@@ -5,6 +5,9 @@ Geometry (real mm, run direction +x, elevation z, width y):
   Section (cut along the stair axis, looking toward +y): saw-tooth profile  riser i at x = (i-1)b from z = (i-1)h to i h,
   tread i at z = i h from x = (i-1)b to i b; floors at z = 0 (x <= 0) and z = H (x >= L); two box stringers (visible, behind
   the cut plane) under the nosing line z = h + (h/b) x; level lines (CENTER) at z = 0 and z = H with level symbols.
+  Stringer position: its vertical depth is o = bd / cos(theta). Deeper than one riser (o >= h): top edge on the nosing line, lower edge o below it (cut at the floor
+  z = 0). Shallower (o < h): the whole strip is lowered by h - o so that its lower edge runs through the feet of the risers ((i-1)b, (i-1)h) and no inner corner
+  sticks out below the stringer (the nosings then stand h - o above its top edge); the strip keeps its depth o.
   Plan: rectangle L x w, tread edges, hidden inner stringer edges, step numbers 1..n-1, UP arrow, section mark 1-1.
 Two independent blocks (section block with its title/notes, plan block with its dimensions/title) are placed on the A3 sheet in one of
 two arrangements: "chong" (plan below the section, x = 0 of both views on one vertical axis) or "ngang" (plan to the right of the section,
@@ -78,7 +81,8 @@ def section_block(sp: dict, s: int):
     add = ov.append
     dims: list[Dim] = []
     theta = math.atan2(h, b)
-    o = ds["bd"] / math.cos(theta)           # vertical offset of the stringer's lower edge below the nosing line (real mm)
+    o = ds["bd"] / math.cos(theta)           # vertical depth of the stringer strip (real mm)
+    shift = max(0.0, h - o)                  # a stringer shallower than one riser is lowered by h - o: its lower edge then passes through the feet of the risers
     if H - o < 0:
         raise SpecError([f"dam_con cao {ds['bd']:g} mm quá lớn so với cao_tang = {H:g} mm (mép dưới dầm cốn ở đầu trên thấp hơn sàn dưới)."])
     add(Line(layer=LAYER_MAIN, tag="floor_lower", p1=(-stub, 0.0), p2=(0.0, 0.0)))
@@ -87,20 +91,20 @@ def section_block(sp: dict, s: int):
         add(Line(layer=LAYER_MAIN, tag="riser", p1=(X((i - 1) * b), X((i - 1) * h)), p2=(X((i - 1) * b), X(i * h))))
     for i in range(1, n):
         add(Line(layer=LAYER_MAIN, tag="tread", p1=(X((i - 1) * b), X(i * h)), p2=(X(i * b), X(i * h))))
-    # stringers (visible behind the cut plane): nosing line and parallel lower edge
-    add(Line(layer=LAYER_STRINGER, tag="stringer_top", p1=(X(0.0), X(h)), p2=(X(L), X(H))))
+    # stringers (visible behind the cut plane): top edge (the nosing line, lowered by `shift` when o < h) and the parallel lower edge o below it
+    add(Line(layer=LAYER_STRINGER, tag="stringer_top", p1=(X(0.0), X(h - shift)), p2=(X(L), X(H - shift))))
     if h - o >= 0:
-        low0 = (0.0, h - o)
+        low0 = (0.0, h - o - shift)          # o <= h: the foot of riser 1, on the floor line
     else:
         low0 = ((o - h) * b / h, 0.0)
-    add(Line(layer=LAYER_STRINGER, tag="stringer_low", p1=(X(low0[0]), X(low0[1])), p2=(X(L), X(H - o))))
+    add(Line(layer=LAYER_STRINGER, tag="stringer_low", p1=(X(low0[0]), X(low0[1])), p2=(X(L), X(H - o - shift))))
     if o > h and H - o < (n - 1) * h:
         add(Line(layer=LAYER_STRINGER, tag="stringer_end", p1=(X(L), X(H - o)), p2=(X(L), X((n - 1) * h))))
     # stringer section label with a leader pointing at the lower edge of the stringer (free space below the stair); text size = the existing note size
     cap_n0 = P["cao_chu_ghi_chu"]
     lbl = f"DẦM CỐN {ds['text']}"
     w_lbl = est_width(lbl, cap_to_em(cap_n0))
-    px, pz = X(low0[0] + (L - low0[0]) * 0.5), X(low0[1] + ((H - o) - low0[1]) * 0.5)          # mid-point of the lower edge
+    px, pz = X(low0[0] + (L - low0[0]) * 0.5), X(low0[1] + ((H - o - shift) - low0[1]) * 0.5)          # mid-point of the lower edge
     lead = 7.0
     if px + lead + 1.0 + w_lbl <= X(L) + 6.0:
         qx, tx, ha = px + lead, px + lead + 1.0, "left"
@@ -157,7 +161,7 @@ def section_block(sp: dict, s: int):
     for txt in notes:
         y -= 4.5
         add(Text(layer=LAYER_TEXT, tag="note", s=txt, pos=(xc, y), h=cap_n, halign="center"))
-    meta = dict(notes=notes, h_text=h_txt, angle_text=f"GÓC DỐC {fmt_dec(th_deg, 1)}°", stringer_offset=o, scale=s, title_y=y_title)
+    meta = dict(notes=notes, h_text=h_txt, angle_text=f"GÓC DỐC {fmt_dec(th_deg, 1)}°", stringer_offset=o, stringer_shift=shift, scale=s, title_y=y_title)
     return ov, dims, meta
 
 

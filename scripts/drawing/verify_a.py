@@ -88,13 +88,17 @@ def check_primitives_a(C: Checks, D, sp):
     slope_ok = len(top) == 1 and close(math.atan2(R(top[0].p2)[1] - R(top[0].p1)[1], R(top[0].p2)[0] - R(top[0].p1)[0]), math.atan(h / b), 1e-9)
     ang = by("angle_text")
     ang_ok = len(ang) == 1 and ang[0].s == X["angle"] and close(ang[0].rot, math.degrees(math.atan(h / b)), 1e-9)
-    dist_ok = False
+    dist_ok = pos_ok = False
+    shift = max(0.0, h - ds["bd"] / math.cos(math.atan(h / b)))        # a stringer shallower than one riser is lowered by h - o (o = bd / cos theta)
     if len(low) == 1 and len(top) == 1:
+        (xt1, zt1), (xt2, zt2) = R(top[0].p1), R(top[0].p2)
         x2, z2 = R(low[0].p2)
-        z_top = h + (h / b) * x2
+        z_top = zt1 + (zt2 - zt1) * (x2 - xt1) / (xt2 - xt1) if xt2 != xt1 else float("nan")        # the drawn top edge, measured where the lower edge ends
         dist_ok = close((z_top - z2) * math.cos(math.atan(h / b)), ds["bd"], TOL)
-    C.add(1, "1.6", "góc dốc = atan(h/b) (đo trên dầm cốn), chữ góc 1 chữ số thập phân; khoảng cách hai mép dầm cốn = chiều cao hộp", slope_ok and ang_ok and dist_ok,
-          f"góc {math.degrees(math.atan(h / b)):.4f}°, chữ {ang[0].s if ang else None!r}; khoảng cách mép dầm {ds['bd']:g} mm: {dist_ok}")
+        pos_ok = close(zt1, h - shift, TOL) and close(zt2, H - shift, TOL) and close(xt1, 0.0, TOL) and close(xt2, L, TOL)
+    C.add(1, "1.6", "góc dốc = atan(h/b) (đo trên dầm cốn), chữ góc 1 chữ số thập phân; khoảng cách hai mép dầm cốn = chiều cao hộp; mép trên dầm = đường mũi bậc hạ xuống max(0, h − o)",
+          slope_ok and ang_ok and dist_ok and pos_ok,
+          f"góc {math.degrees(math.atan(h / b)):.4f}°, chữ {ang[0].s if ang else None!r}; khoảng cách mép dầm {ds['bd']:g} mm: {dist_ok}; mép trên hạ {shift:.3f} mm so với đường mũi bậc: {pos_ok}")
     lv = by("level_line")
     zs = sorted(round(R(p.p1)[1], 6) for p in lv)
     lvt = sorted(p.s for p in by("level_text"))
@@ -121,6 +125,7 @@ def check_primitives_a(C: Checks, D, sp):
     check_dim_text_clear(C, D)
     check_extras_a(C, D, sp)
     check_dam_label(C, D, sp)
+    check_stringer_covers_a(C, D, sp)
     segs = [(g.p1, g.p2) for g in D.prims if isinstance(g, Line) and not g.sheet and not g.tag.startswith("dim_")]
     for r_ in (p for p in D.prims if isinstance(p, Rect) and not p.sheet):
         (ax_, ay_), (bx_, by_) = r_.p0, r_.p1
@@ -139,6 +144,40 @@ def check_primitives_a(C: Checks, D, sp):
         C.info(1, "1.11", "cảnh báo mềm (không phải lỗi)", " | ".join(sp["warnings"]))
     else:
         C.info(1, "1.11", "cảnh báo mềm 2h + b", f"2h + b = {sp['two_h_b']:.1f} mm, trong khoảng {sp['params']['nguong_2hb_min']:g}-{sp['params']['nguong_2hb_max']:g} mm (quy tắc kinh nghiệm, không phải điều khoản TCVN)")
+
+
+def _stringer_cover(top, low, n, b, h, tol):
+    """Feet of the risers F_i = ((i-1)b, (i-1)h), i = 1..n (the inner corners of the saw-tooth) against the stringer strip given by its top and lower edge
+    ((x1, z1), (x2, z2)) in real mm. The strip covers a corner when low(x) <= z <= top(x); left of the start of the lower edge (cut at the floor) the lower edge is z = 0.
+    Returns (worst amount in mm a corner sticks out below the lower edge or above the top edge, [(i, amount)])."""
+    (xt1, zt1), (xt2, zt2) = top
+    (xl1, zl1), (xl2, zl2) = low
+    zt = lambda x: zt1 + (zt2 - zt1) * (x - xt1) / (xt2 - xt1)
+    zl = lambda x: 0.0 if x < min(xl1, xl2) - 1e-9 else zl1 + (zl2 - zl1) * (x - xl1) / (xl2 - xl1)
+    out = []
+    for i in range(1, n + 1):
+        x, z = (i - 1) * b, (i - 1) * h
+        d = max(zl(x) - z, z - zt(x))
+        if d > tol:
+            out.append((i, round(d, 3)))
+    return (max((d for _, d in out), default=0.0)), out
+
+
+def check_stringer_covers_a(C: Checks, D, sp):
+    """1.24: the stringer strip (top and lower edge of the primitives) covers every inner corner (foot of each riser) of the saw-tooth: no corner sticks out below the lower edge."""
+    s = D.view_scale("section")
+    ox, oy = D.meta["section_origin"]
+    R = lambda p: ((p[0] - ox) * s, (p[1] - oy) * s)
+    n, H, b = sp["so_bac"], sp["cao_tang"], sp["b"]
+    h = H / n
+    top = [p for p in D.prims if p.tag == "stringer_top"]
+    low = [p for p in D.prims if p.tag == "stringer_low"]
+    ok, detail = False, "không có đúng một mép trên và một mép dưới dầm cốn"
+    if len(top) == 1 and len(low) == 1:
+        worst, bad = _stringer_cover((R(top[0].p1), R(top[0].p2)), (R(low[0].p1), R(low[0].p2)), n, b, h, TOL)
+        ok = not bad
+        detail = f"{n} chân bậc; lòi ra khỏi dầm lớn nhất {worst:.3f} mm; chân lòi ra: {bad[:3]}"
+    C.add(1, "1.24", "dầm cốn che hết góc trong (chân bậc) của răng cưa: mọi chân bậc ((i−1)b, (i−1)h) nằm trong dải giữa mép dưới và mép trên dầm", ok, detail)
 
 
 SECTION_TAGS = {"floor_lower", "floor_upper", "riser", "tread", "stringer_top", "stringer_low", "stringer_end", "level_line", "level_tri", "level_bar", "level_text",
@@ -399,13 +438,23 @@ def check_dxf_a(C: Checks, D, sp, dx):
     lv_ok = sorted(round(g[0][1], 3) for g in lv if close(g[0][1], g[1][1], 1e-6)) == [0.0, round(H, 3)]
     st = ents.get("NET-CHINH", [])
     stray = [lay for lay in ("KEO", "COT") if ents.get(lay)]          # the stair has no rafters / columns: nothing may be on those layers
-    top_ok = any(_same_seg(g, ((0.0, h), (L, H)), TOL_DXF) for g in st)
     cos_t = math.cos(math.atan(h / b))
-    low_ok = any(abs(g[1][0] - L) < TOL_DXF and abs(g[1][0] - g[0][0]) > 1e-9 and close((H - g[1][1]) * cos_t, ds["bd"], TOL_DXF)
+    shift = max(0.0, h - ds["bd"] / cos_t)           # a stringer shallower than one riser is lowered by h - o (o = bd / cos theta): its lower edge runs through the riser feet
+    top_ok = any(_same_seg(g, ((0.0, h - shift), (L, H - shift)), TOL_DXF) for g in st)
+    low_ok = any(abs(g[1][0] - L) < TOL_DXF and abs(g[1][0] - g[0][0]) > 1e-9 and close((H - shift - g[1][1]) * cos_t, ds["bd"], TOL_DXF)
                  and close((g[1][1] - g[0][1]) / (g[1][0] - g[0][0]), h / b, 1e-9) for g in st)
     C.add(2, "2.7", "DXF (mm thật, gốc ở mép sàn dưới): răng cưa đúng công thức, đường cao độ z = 0 và z = cao_tang, dầm cốn đúng độ dốc và chiều cao",
           n_ok == len(exp) and lv_ok and top_ok and low_ok and not stray,
           f"{n_ok}/{len(exp)} đoạn răng cưa; cao độ {lv_ok}; mép trên dầm {top_ok}; mép dưới dầm {low_ok} (dầm cốn trên layer NET-CHINH, không có gì trên layer KEO/COT: {not stray}); thiếu {miss[:2]}")
+    # 2.15: independent of the spec's stringer formula: the two sloped NET-CHINH edges must cover every foot of a riser (real mm)
+    slope = [g for g in st if abs(g[1][0] - g[0][0]) > 1.0 and close((g[1][1] - g[0][1]) / (g[1][0] - g[0][0]), h / b, 1e-9)]
+    ok15, d15 = False, f"{len(slope)} đoạn dầm cốn nghiêng trên NET-CHINH (cần 2)"
+    if len(slope) == 2:
+        ends = sorted(((g[0], g[1]) if g[0][0] <= g[1][0] else (g[1], g[0]) for g in slope), key=lambda g: -g[1][1])     # higher edge first (compared at the upper end)
+        worst, bad = _stringer_cover(ends[0], ends[1], n, b, h, 1e-6)
+        ok15 = not bad
+        d15 = f"{n} chân bậc; lòi ra khỏi dầm lớn nhất {worst:.3f} mm; chân lòi ra: {bad[:3]}"
+    C.add(2, "2.15", "DXF (mm thật): hai mép dầm cốn che hết mọi chân bậc ((i−1)b, (i−1)h): không chân nào lòi ra dưới mép dưới hoặc trên mép trên", ok15, d15)
     polys = [e for e in dx["ents"] if e["type"] == "LWPOLYLINE" and e["layer"] == "NET-CHINH"]
     plan = []
     for e in polys:
