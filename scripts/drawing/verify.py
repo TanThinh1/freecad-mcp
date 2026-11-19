@@ -312,6 +312,9 @@ def check_dxf(C: Checks, D, sp, profile, dxf: str, do_fc: bool):
     elif D.kind == "C":
         import verify_c
         verify_c.check_dxf_c(C, D, sp, dx)
+    elif D.kind == "D":
+        import verify_d
+        verify_d.check_dxf_d(C, D, sp, dx)
     else:
         import verify_a
         verify_a.check_dxf_a(C, D, sp, dx)
@@ -337,7 +340,7 @@ def check_dxf(C: Checks, D, sp, profile, dxf: str, do_fc: bool):
 
 
 # ------------------------------------------------------------------ 3. DWG
-def check_dwg(C: Checks, D, dx_src: dict, dwg: str, workdir: str, dwg_info: dict):
+def check_dwg(C: Checks, D, dx_src: dict, dwg: str, workdir: str, dwg_info: dict, sp=None):
     C.add(3, "3.1", "ODA tạo DWG hợp lệ (header AC1032, returncode 0, không file .err)", dwg_info.get("ok") and dwg_info.get("header") == "AC1032" and dwg_info.get("returncode") == 0 and not dwg_info.get("err_files"),
           f"{dwg_info.get('size', 0):,} byte, {dwg_info.get('seconds', 0):.1f}s, returncode={dwg_info.get('returncode')}, file .err: {dwg_info.get('err_files')}")
     back = os.path.join(workdir, "roundtrip_back.dxf")
@@ -361,6 +364,9 @@ def check_dwg(C: Checks, D, dx_src: dict, dwg: str, workdir: str, dwg_info: dict
           f"LTSCALE {bx['ltscale']:g}; {bx['ltypes'].get('CENTER')}")
     check_title_fit_dxf(C, D, bx, 3, "3.7", "DWG (đọc lại sau khứ hồi)")
     check_text_anchor(C, D, bx, 3, "3.8", "DWG (đọc lại sau khứ hồi)")
+    if D.kind == "D" and sp is not None:
+        import verify_d
+        verify_d.check_dwg_d(C, D, sp, bx)
 
 
 # ------------------------------------------------------------------ 4/5. PDF
@@ -495,6 +501,9 @@ def check_pdf(C: Checks, D, sp, dx: dict, pdf: str, png: str | None, profile: di
     C.add(5, "5.4", "nét CENTER: số lượng = số đường layer CENTER của primitives, mẫu nét 12 / 1,5 / 2 / 1,5 mm", len(cen) == n_center and n_center > 0 and pat_ok,
           f"PDF {len(cen)} / primitives {n_center}; mẫu {[round(x, 2) for x in cen[0]['dash']] if cen else None}")
     check_title_fit_pdf(C, D, paths)
+    if D.kind == "D":
+        import verify_d
+        verify_d.check_pdf_d(C, D, sp, dx, paths, profile)
     ok, bad, wr, n_digit = pdf_text_match(D, paths)
     ntext = sum(1 for p in D.prims if isinstance(p, Text))
     C.add(5, "5.5", "mỗi chuỗi chữ (kể cả khung tên) có nét chữ đúng vị trí; số có ≥ 3 chữ số đúng độ rộng nét chữ", ok == ntext and not wr,
@@ -674,6 +683,9 @@ def run_all(D, sp, profile, files: dict, do_fc=True, do_dwg=True, do_pdf=True, d
     elif D.kind == "C":
         import verify_c
         verify_c.check_primitives_c(C, D, sp)
+    elif D.kind == "D":
+        import verify_d
+        verify_d.check_primitives_d(C, D, sp)
     else:
         check_primitives_b(C, D, sp)
     check_title_rows(C, D, sp)
@@ -682,7 +694,7 @@ def run_all(D, sp, profile, files: dict, do_fc=True, do_dwg=True, do_pdf=True, d
     check_title_fit_dxf(C, D, dx, 2, "2.13", "DXF")
     check_text_anchor(C, D, dx, 2, "2.14", "DXF")
     if do_dwg:
-        check_dwg(C, D, dx, files["dwg"], files.get("work") or os.path.dirname(files["dxf"]), dwg_info or {})
+        check_dwg(C, D, dx, files["dwg"], files.get("work") or os.path.dirname(files["dxf"]), dwg_info or {}, sp)
     if do_pdf:
         check_pdf(C, D, sp, dx, files["pdf"], files.get("png"), profile)
     if D.kind == "A" and model3d is not None:

@@ -26,9 +26,11 @@ import verify  # noqa: E402
 import build_a  # noqa: E402
 import build_b  # noqa: E402
 import build_c  # noqa: E402
+import build_d  # noqa: E402
 import spec_a  # noqa: E402
 import spec_b  # noqa: E402
 import spec_c  # noqa: E402
+import spec_d  # noqa: E402
 from dxf_render import render_dxf  # noqa: E402
 from pdf_render import symbol_svg  # noqa: E402
 from primitives import cap_to_em  # noqa: E402
@@ -37,7 +39,7 @@ from tcvn import SHEETS, ProfileError, read_profile  # noqa: E402
 
 FREECAD = os.environ.get("FREECAD_EXE") or os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "FreeCAD 1.1", "bin", "freecad.exe")
 FREECADCMD = os.environ.get("FREECADCMD_EXE") or os.path.join(os.path.dirname(FREECAD), "FreeCADCmd.exe")
-KINDS = {"A": (spec_a.validate, build_a.build), "B": (spec_b.validate, build_b.build), "C": (spec_c.validate, build_c.build)}
+KINDS = {"A": (spec_a.validate, build_a.build), "B": (spec_b.validate, build_b.build), "C": (spec_c.validate, build_c.build), "D": (spec_d.validate, build_d.build)}
 
 
 def render_3d(sp: dict, outdir: str, work: str, name: str, timeout: int = 240) -> dict:
@@ -119,7 +121,7 @@ def make(spec_path: str, out_root: str, profile_path: str | None, do_pdf=True, d
         t = time.perf_counter()
         kind = raw.get("loai", "B") if isinstance(raw, dict) else "B"
         if kind not in KINDS:
-            raise SpecError([f"loai = {kind!r} chưa được hỗ trợ (A: cầu thang thép, B: mặt bằng lưới trục và cột, C: mặt cắt ngang khung)."])
+            raise SpecError([f"loai = {kind!r} chưa được hỗ trợ (A: cầu thang thép, B: mặt bằng lưới trục và cột, C: mặt cắt ngang khung, D: mặt bằng xà gồ mái)."])
         validate_fn, build_fn = KINDS[kind]
         sp = validate_fn(raw)
         profile = read_profile(profile_path)

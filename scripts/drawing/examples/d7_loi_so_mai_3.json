@@ -1,0 +1,20 @@
+{
+  "loai": "D",
+  "ten": "d7_loi_so_mai_3",
+  "nhip": 12000,
+  "dai_nha": 30000,
+  "buoc_cot": 6000,
+  "do_doc_mai": 15,
+  "so_mai": 3,
+  "buoc_xa_go": 1500,
+  "ty_le": "auto",
+  "khung_ten": {
+    "don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP",
+    "cong_trinh": "NHÀ KHO TIỀN CHẾ",
+    "chu_dau_tu": "CÔNG TY TNHH THƯƠNG MẠI ABC",
+    "ten_ban_ve": "MẶT BẰNG XÀ GỒ MÁI",
+    "ky_hieu_ban_ve": "KC-04",
+    "loai_ho_so": "BVTC",
+    "ngay": "19/11/2026"
+  }
+}
