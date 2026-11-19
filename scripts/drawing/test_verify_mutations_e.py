@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import sys
+from fractions import Fraction
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -85,9 +86,22 @@ def warn_variant(raw):
     raw["hinh"][0]["phan_tu"] = [e for e in raw["hinh"][0]["phan_tu"] if e["loai"] != "phong"]
 
 
+def x_variant(raw):
+    el = raw["hinh"][0]["phan_tu"]
+    el += [dict(loai="lan_can", id="LC", tu=[7200, 0], dai=1500, cao=1000, buoc=500), dict(loai="bac_thang_don_gian", id="BT", tu=[9600, 0], so_bac=4, cao_bac=170, rong_bac=270),
+           dict(loai="dau_cat", id="DC", ten="1", tu=[-600, -1300], den=[1000, -1300], nhin="tren"), dict(loai="tuyen_gio", id="G1", ten="1", x=3400, tu_y=-300, den_y=3400),
+           dict(loai="cot_mc", id="CM", hcn=[10800, 0, 11020, 3000]), dict(loai="mong_don", id="MG", goc=[11300, -1200], dai_lot=1000, day_lot=100, dai_mong=800, day_mong=200, dai_co=300, cao_co=900)]
+
+
+def warn2_variant(raw):
+    raw["hinh"][0]["phan_tu"] += [dict(loai="lan_can", id="LC", tu=[7200, 0], dai=1500, cao=800, buoc=500), dict(loai="bac_thang_don_gian", id="BT", tu=[9600, 0], so_bac=4, cao_bac=200, rong_bac=250)]
+
+
 def main():
     profile = read_profile()
-    S = {"e1": load("e1_phong_don_gian", profile), "e2": load("e2_nha_cap4", profile), "e1r": load("e1_phong_don_gian", profile, raw_variant), "e1w": load("e1_phong_don_gian", profile, warn_variant)}
+    S = {"e1": load("e1_phong_don_gian", profile), "e2": load("e2_nha_cap4", profile), "e1r": load("e1_phong_don_gian", profile, raw_variant), "e1w": load("e1_phong_don_gian", profile, warn_variant),
+         "e4": load("e4_mat_dung_nha_cap4", profile), "e5": load("e5_mat_cat_1_1", profile), "e5x": load("e5_mat_cat_1_1", profile, x_variant), "e7": load("e7_chi_tiet_mong", profile),
+         "e5w": load("e5_mat_cat_1_1", profile, warn2_variant)}
     work = os.path.join(OUT, "_mutations_e")
     shutil.rmtree(work, ignore_errors=True)
     os.makedirs(work)
@@ -127,6 +141,50 @@ def main():
 
     L = lambda D, pre: tagged(D, pre, Line)
     T = lambda D, pre: tagged(D, pre, Text)
+    H = lambda D, k=0: L(D, "hatch:")[k]
+    # ---- phase 2: 1.63 hatch
+    add("hatch_line_deleted", "e5", lambda D: D.prims.remove(H(D, 3)), {"1.63"}, {"2.36"})
+    add("hatch_line_moved_0.5mm_near_miss", "e5", lambda D: shift(D, H(D, 5), 0.5, 0.0), {"1.63"}, {"2.36"})
+    add("hatch_extra_line_inside_the_rectangle", "e7", lambda D: D.prims.append(Line(layer="MAT-CAT", tag="hatch:NEN1:0:0", p1=(H(D, 0).p1[0], H(D, 0).p1[1]), p2=(H(D, 0).p1[0] + 0.2, H(D, 0).p1[1] + 0.1))), {"1.63", "1.68"}, {"2.36"})
+    add("hatch_on_wrong_layer", "e4", lambda D: setattr(H(D, 2), "layer", "NET-MANH"), {"1.63"}, {"2.36"})
+    add("hatch_family_shifted_half_a_spacing", "e5", lambda D: [shift(D, h, 0.0, 1.0 * D.scale) for h in L(D, "hatch:TUONG:1")], {"1.63"}, {"2.36"})
+    add("hatch_for_the_wrong_material_double_density", "e7", lambda D: [D.prims.remove(h) for h in L(D, "hatch:M1:1")[::2]], {"1.63"}, {"2.36"})
+    # ---- 1.64 layers / structural rectangles
+    add("layer_rectangle_moved_1mm", "e5", lambda D: shift(D, tagged(D, "lop:NEN:1", Rect)[0], 0.0, 1.0), {"1.64", "1.67"}, {"2.30"})
+    add("layer_rectangle_thinner_1mm", "e5", lambda D: setattr(tagged(D, "lop:TUONG:1", Rect)[0], "p1", (tagged(D, "lop:TUONG:1", Rect)[0].p1[0] - 1.0 / D.scale, tagged(D, "lop:TUONG:1", Rect)[0].p1[1])), {"1.64", "1.67"}, {"2.30"})
+    add("slab_rectangle_deleted", "e5", lambda D: D.prims.remove(tagged(D, "kc:SAN", Rect)[0]), {"1.64"}, {"2.30"})
+    add("foundation_block_moved_1mm", "e7", lambda D: shift(D, tagged(D, "mong:M1:mong", Rect)[0], 1.0, 0.0), {"1.64"}, {"2.30"})
+    add("rebar_circle_moved_1mm", "e7", lambda D: shift(D, tagged(D, "cot:CT:thep", Circle)[1], 1.0, 0.0), {"1.64"}, {"2.31"})
+    add("stirrup_rectangle_resized", "e7", lambda D: setattr(tagged(D, "cot:CT:dai", Rect)[0], "p1", (tagged(D, "cot:CT:dai", Rect)[0].p1[0] + 1.0 / D.scale, tagged(D, "cot:CT:dai", Rect)[0].p1[1])), {"1.64"}, {"2.31"})
+    add("rebar_circle_deleted", "e7", lambda D: D.prims.remove(tagged(D, "cot:CT:thep", Circle)[0]), {"1.64"}, {"2.31"})
+    # ---- 1.65 elevation / section items
+    add("roof_line_moved_1mm", "e4", lambda D: shift(D, L(D, "mai:M1:top")[0], 0.0, 1.0), {"1.65"}, {"2.30"})
+    add("roof_end_line_deleted", "e5", lambda D: D.prims.remove(L(D, "mai:MAI:dau")[0]), {"1.65"}, {"2.30"})
+    add("door_leaf_rectangle_deleted", "e4", lambda D: D.prims.remove(tagged(D, "cd:CD1:canh", Rect)[0]), {"1.65"}, {"2.31"})
+    add("door_swing_line_deleted", "e4", lambda D: D.prims.remove(L(D, "cd:CD1:gach")[0]), {"1.65"}, {"2.31"})
+    add("window_mullion_moved_1mm", "e4", lambda D: shift(D, L(D, "cd:CD2:gach")[0], 1.0, 0.0), {"1.65"}, {"2.31"})
+    add("railing_post_deleted", "e5x", lambda D: D.prims.remove(L(D, "lc:LC:cot")[1]), {"1.65"}, {"2.31"})
+    add("railing_rail_moved_1mm", "e5x", lambda D: shift(D, L(D, "lc:LC:thanh")[0], 0.0, 1.0), {"1.65"}, {"2.31"})
+    add("stair_segment_deleted", "e5x", lambda D: D.prims.remove(L(D, "bt:BT")[2]), {"1.65"}, {"2.30"})
+    add("stair_segment_moved_1mm", "e5x", lambda D: shift(D, L(D, "bt:BT")[4], 1.0, 0.0), {"1.65"}, {"2.30"})
+    # ---- 1.66 markers
+    add("level_symbol_line_moved_1mm", "e4", lambda D: shift(D, L(D, "lv:")[1], 0.0, 1.0), {"1.66", "1.69"}, {"2.31"})
+    add("level_bar_deleted", "e5", lambda D: D.prims.remove(L(D, "lv:")[2]), {"1.66", "1.69"}, {"2.31"})
+    add("leader_line_moved_1mm", "e5", lambda D: shift(D, L(D, "leader:")[0], 0.0, 1.0), {"1.66"}, {"2.31"})
+    add("leader_tick_deleted", "e7", lambda D: D.prims.remove([p for p in L(D, "leader:") if p.tag.endswith(":tick")][0]), {"1.66"}, {"2.31"})
+    add("section_marker_arm_deleted", "e5x", lambda D: D.prims.remove(L(D, "cut_arm:DC")[0]), {"1.66"}, {"2.30"})
+    add("section_marker_line_shortened", "e5x", lambda D: setattr(L(D, "cut:DC")[0], "p2", (L(D, "cut:DC")[0].p2[0] - 1.0 / D.scale, L(D, "cut:DC")[0].p2[1])), {"1.66"}, {"2.30"})
+    add("wind_axis_moved_1mm", "e4", lambda D: shift(D, L(D, "gio_line:G1")[0], 1.0, 0.0), {"1.66"}, {"2.31"})
+    add("wind_bubble_deleted", "e4", lambda D: D.prims.remove(tagged(D, "gio_bubble:G2", Circle)[0]), {"1.66"}, {"2.31"})
+    # ---- 1.67 layer thickness (measured), 1.68 hatch containment, 1.69 level text
+    add("layers_not_contiguous_gap_1mm", "e5", lambda D: shift(D, tagged(D, "lop:NEN:2", Rect)[0], 0.0, 1.0), {"1.67"}, {"2.30"})
+    add("layer_thickness_off_0.5mm", "e5", lambda D: setattr(tagged(D, "lop:NEN:0", Rect)[0], "p1", (tagged(D, "lop:NEN:0", Rect)[0].p1[0], tagged(D, "lop:NEN:0", Rect)[0].p1[1] + 0.5 / D.scale)), {"1.67"}, {"2.30"})
+    add("hatch_line_sticks_out_of_its_rectangle", "e5", lambda D: setattr(H(D, 4), "p2", (H(D, 4).p2[0] + 2.0, H(D, 4).p2[1] + 2.0)), {"1.68", "1.63"}, {"2.36"})
+    add("hatch_line_tilted", "e7", lambda D: setattr(H(D, 6), "p2", (H(D, 6).p2[0], H(D, 6).p2[1] + 0.8)), {"1.68", "1.63"}, {"2.36"})
+    add("level_text_wrong_value", "e4", lambda D: setattr(T(D, "lv_text:")[1], "s", "+3.400"), {"1.69", "1.55"}, {"2.32"})
+    add("level_text_sign_dropped", "e5", lambda D: setattr(T(D, "lv_text:")[0], "s", "0.300"), {"1.69", "1.55"}, {"2.32"})
+    add("level_symbol_moved_100mm_text_unchanged", "e4", lambda D: [shift(D, p, 0.0, 100.0) for p in L(D, "lv:") if p.tag == "lv:11"], {"1.69", "1.66"}, {"2.31"})
+    add("wrong_warning_missing_for_low_railing_and_odd_stair", "e5w", lambda D: D.info.__setitem__("warnings", []), {"1.61"})
     # ---- 1.50 axes + bubbles
     add("axis_vertical_moved_1mm", "e1", lambda D: shift(D, L(D, "axis_v")[0], 1.0, 0.0), {"1.50"}, {"2.31"})
     add("axis_vertical_moved_0.5mm_near_miss", "e1", lambda D: shift(D, L(D, "axis_v")[1], 0.5, 0.0), {"1.50"}, {"2.31"})
@@ -240,6 +298,11 @@ def main():
     need({"1.53", "1.55"}, prim_check(D1, sp_edit(sp1, lambda s: elems(s, "noi_that_co_ban")[0].update(kieu="ban"))), "spec_furniture_kind_vs_drawing")
     need({"1.54", "1.55"}, prim_check(D2, sp_edit(sp2, lambda s: elems(s, "kich_thuoc")[0].update(tham_chieu=["truc:1", "S1:dau", "S1:cuoi", "D1:dau", "D1:cuoi", "truc:2"]))), "spec_dimension_reference_changed")
     need({"1.60"}, prim_check(D1, sp_edit(sp1, lambda s: s.update(scale=100))), "spec_scale_1:100_vs_drawing_1:50")
+    sp5, D5 = S["e5"]
+    need({"1.67", "1.64", "1.63"}, prim_check(D5, sp_edit(sp5, lambda s: s["views"][0]["elems"][0]["layers"].__setitem__(0, ("dat", Fraction(160))))), "spec_layer_150_vs_160_in_the_drawing")
+    need({"1.67"}, prim_check(D5, sp_edit(sp5, lambda s: elems(s, "lop_vat_lieu")[1].update(tong_day=Fraction(240)))), "spec_total_thickness_240_vs_layers_230")
+    need({"1.69"}, prim_check(D5, sp_edit(sp5, lambda s: s["views"][0].update(mo_cao=(Fraction(0), Fraction(1))))), "spec_reference_level_1.000_vs_drawn_texts")
+    need({"1.64", "1.63", "1.65"}, prim_check(D5, sp_edit(sp5, lambda s: elems(s, "san")[0].update(box=(Fraction(-100), Fraction(3000), Fraction(3000), Fraction(3130))))), "spec_slab_top_3130_vs_drawing_3120")
 
     # ---- DXF (mutated list as source AND expectation -> only the independent checks 2.30-2.34 can notice)
     for name, key, fn, prim_ids, dxf_ids in cat:
@@ -328,6 +391,14 @@ def main():
             expect("dwg_round_trip_skipped", False, f"ODA không chạy được: {info}")
     except oda.OdaError as e:
         expect("dwg_round_trip_skipped", False, f"ODA: {e}")
+
+    # ---- DWG read back of the phase 2 hatch (mutated DXF read back; the ODA round trip itself is the control above)
+    for nm, fn in (("hatch_line_deleted", lambda D: D.prims.remove(H(D, 3))), ("hatch_line_moved_0.5mm", lambda D: shift(D, H(D, 5), 0.5, 0.0)), ("hatch_line_extra", lambda D: D.prims.append(copy.deepcopy(H(D, 2))))):
+        Dm = mut(fn, D5)
+        _, _, pbad = dxf_of(Dm, "dwg5_" + nm, Dm, sp5)
+        C = verify.Checks()
+        verify_e.check_dwg_e(C, D5, sp5, read_dxf(pbad))
+        need({"3.25"}, failed(C), f"dwg_read_back_{nm}")
 
     # ---- PDF cross-checks
     pdf1, pdf2 = (os.path.join(OUT, n, n + ".pdf") for n in ("e1_phong_don_gian", "e2_nha_cap4"))
