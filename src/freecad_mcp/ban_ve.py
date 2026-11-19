@@ -23,7 +23,7 @@ REPO = Path(__file__).resolve().parents[2]
 DRAW = REPO / "scripts" / "drawing"
 OUT = REPO / "out"
 JOBS = OUT / "_jobs"
-LOAI = ("thang", "luoi_cot", "khung_ngang", "xa_go")
+LOAI = ("thang", "luoi_cot", "khung_ngang", "xa_go", "ve_tu_do")
 JOB_TIMEOUT = 900          # seconds; a drawing normally needs 30-60 s
 CLI_TIMEOUT = 30
 MAX_PNG_BYTES = 1_500_000
@@ -95,11 +95,11 @@ def _run_cli(args: list[str], freecadcmd: list[str] | None = None) -> dict:
 def _check_loai(loai) -> str | None:
     if not isinstance(loai, str) or loai not in LOAI:
         shown = loai if isinstance(loai, str) and len(loai) <= 40 else type(loai).__name__
-        return f"loai = {shown!r} không hợp lệ. Dùng một trong: thang, luoi_cot, khung_ngang, xa_go."
+        return f"loai = {shown!r} không hợp lệ. Dùng một trong: thang, luoi_cot, khung_ngang, xa_go, ve_tu_do."
     return None
 
 
-def _spec_text(spec) -> tuple[str | None, str | None]:
+def _spec_text(spec, loai: str = "") -> tuple[str | None, str | None]:
     """spec (dict, or a JSON string) -> (JSON text, error)."""
     if isinstance(spec, str):
         try:
@@ -112,8 +112,9 @@ def _spec_text(spec) -> tuple[str | None, str | None]:
         text = json.dumps(spec, ensure_ascii=False, allow_nan=False)
     except (ValueError, TypeError):
         return None, "spec chứa giá trị không hợp lệ (NaN, Infinity hoặc kiểu không phải JSON)."
-    if len(text.encode("utf-8")) > 20000:
-        return None, "spec quá lớn (> 20000 byte)."
+    lim = 300000 if loai == "ve_tu_do" else 20000
+    if len(text.encode("utf-8")) > lim:
+        return None, f"spec quá lớn (> {lim} byte)."
     return text, None
 
 
@@ -129,7 +130,7 @@ def kiem_tra(loai: str, spec, freecadcmd: list[str] | None = None) -> dict:
     err = _check_loai(loai) or _paths_ok()
     if err:
         return _bad(err)
-    text, err = _spec_text(spec)
+    text, err = _spec_text(spec, loai)
     if err:
         return dict(hop_le=False, loai=loai, loi=[err])
     if not _profile_path():
@@ -239,7 +240,7 @@ def ve(loai: str, spec, freecadcmd: list[str] | None = None) -> dict:
     err = _check_loai(loai) or _paths_ok()
     if err:
         return _bad(err)
-    text, err = _spec_text(spec)
+    text, err = _spec_text(spec, loai)
     if err:
         return dict(hop_le=False, loai=loai, loi=[err])
     if not _profile_path():

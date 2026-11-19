@@ -1,6 +1,6 @@
 """Command line used by the MCP tools (src/freecad_mcp/ban_ve.py): guide / check one drawing spec. Prints ONE JSON object on stdout (UTF-8).
 
-    python ban_ve_cli.py guide <thang|luoi_cot|khung_ngang|xa_go>
+    python ban_ve_cli.py guide <thang|luoi_cot|khung_ngang|xa_go|ve_tu_do>
     python ban_ve_cli.py check <loai> <spec.json> [--write-spec normalized.json]
 
 `check` validates the spec with the same code as make_drawing, builds the primitives (no FreeCAD, no files except --write-spec) and reports the chosen
@@ -17,19 +17,21 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-LOAI = {"thang": "A", "luoi_cot": "B", "khung_ngang": "C", "xa_go": "D"}
-EXAMPLE = {"thang": "a1_3600x20.json", "luoi_cot": "b2_12000x30000.json", "khung_ngang": "c1_12000x6000.json", "xa_go": "d1_12000x30000_2mai.json"}
+LOAI = {"thang": "A", "luoi_cot": "B", "khung_ngang": "C", "xa_go": "D", "ve_tu_do": "E"}
+EXAMPLE = {"thang": "a1_3600x20.json", "luoi_cot": "b2_12000x30000.json", "khung_ngang": "c1_12000x6000.json", "xa_go": "d1_12000x30000_2mai.json", "ve_tu_do": "e2_nha_cap4.json"}
 MAX_SPEC_BYTES = 20000
+MAX_SPEC_BYTES_E = 300000          # ve_tu_do: up to 2000 elements
 
 KHOA_HOP_LE = {
     "thang": {"cao_tang", "so_bac", "be_rong_mat_bac", "be_rong_ve", "chieu_day_tam", "dam_con", "ty_le", "bo_cuc", "ty_le_rieng", "khung_ten", "tham_so"},
     "luoi_cot": {"nhip", "dai_nha", "buoc_cot", "tiet_dien_cot", "ty_le", "kho_giay", "gom_nhan_tiet_dien", "khung_ten", "tham_so"},
     "khung_ngang": {"nhip", "cao_cot", "do_doc_mai", "so_mai", "tiet_dien_cot", "tiet_dien_keo", "ve_truc_cau_kien", "ty_le", "kho_giay", "khung_ten", "tham_so"},
     "xa_go": {"nhip", "dai_nha", "buoc_cot", "do_doc_mai", "so_mai", "buoc_xa_go", "tiet_dien_cot", "tiet_dien_xa_go", "ty_le", "kho_giay", "khung_ten", "tham_so"},
+    "ve_tu_do": {"hinh", "ty_le", "kho_giay", "khung_ten", "tham_so"},
 }
 # Mandatory numbers per type: when one is missing the answer is "ask the customer", never a guess.
 BAT_BUOC = {"thang": ("cao_tang", "so_bac", "be_rong_ve"), "luoi_cot": ("nhip", "dai_nha", "buoc_cot"), "khung_ngang": ("nhip", "cao_cot", "do_doc_mai", "so_mai"),
-           "xa_go": ("nhip", "dai_nha", "buoc_cot", "do_doc_mai", "so_mai", "buoc_xa_go")}
+           "xa_go": ("nhip", "dai_nha", "buoc_cot", "do_doc_mai", "so_mai", "buoc_xa_go"), "ve_tu_do": ("hinh",)}
 # Secondary values used when the spec omits them (the answer lists every default that was applied so the assistant can tell the customer).
 # These are tool defaults taken from the examples, NOT values verified from a standard.
 MAC_DINH = {
@@ -37,12 +39,13 @@ MAC_DINH = {
     "luoi_cot": {"tiet_dien_cot": ("H250x125x6x9", "tiết diện cột"), "ty_le": ("auto", "tỷ lệ tự chọn")},
     "khung_ngang": {"tiet_dien_cot": ("H250x125x6x9", "tiết diện cột"), "tiet_dien_keo": ("H250x125x6x9", "tiết diện kèo"), "ty_le": ("auto", "tỷ lệ tự chọn")},
     "xa_go": {"ty_le": ("auto", "tỷ lệ tự chọn")},
+    "ve_tu_do": {"ty_le": ("auto", "tỷ lệ tự chọn")},
 }
 # Type D applies these two itself (spec_d.validate) so that the drawing can print the word MẶC ĐỊNH next to the purlin section; they are only REPORTED here, never written into the spec.
 MAC_DINH_D = {"tiet_dien_cot": ("H250x125x6x9", "tiết diện cột"), "tiet_dien_xa_go": ("C150x50x20x2.0", "tiết diện xà gồ (bản vẽ ghi rõ MẶC ĐỊNH)")}
 # Title-block sample used when the customer gives no names (fictional placeholder text, as in the example specs).
 KHUNG_TEN_MAU = {"don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP", "chu_dau_tu": "CÔNG TY TNHH THƯƠNG MẠI ABC", "loai_ho_so": "BVTC"}
-CONG_TRINH_MAU = {"thang": "CẦU THANG THÉP", "luoi_cot": "NHÀ KHO TIỀN CHẾ", "khung_ngang": "NHÀ XƯỞNG KHUNG THÉP", "xa_go": "NHÀ XƯỞNG KHUNG THÉP"}
+CONG_TRINH_MAU = {"thang": "CẦU THANG THÉP", "luoi_cot": "NHÀ KHO TIỀN CHẾ", "khung_ngang": "NHÀ XƯỞNG KHUNG THÉP", "xa_go": "NHÀ XƯỞNG KHUNG THÉP", "ve_tu_do": "CÔNG TRÌNH DÂN DỤNG"}
 
 KHUNG_TEN = ("khung_ten (tùy chọn): {don_vi_tk, cong_trinh, chu_dau_tu, ten_ban_ve, ky_hieu_ban_ve, loai_ho_so, ngay (dd/mm/yyyy), o15, "
              "ky: [{chuc_danh, ho_ten}], chu_tri / kiem_tra / thiet_ke (true = chỉ in nhãn chức danh ở ô 8-14; chuỗi = họ tên do người dùng cung cấp). MẶC ĐỊNH khi spec không nói gì: "
@@ -162,6 +165,9 @@ def auto_name(loai: str, spec: dict) -> str:
         name = f"thang_{_num_name(g('cao_tang'))}x{_num_name(g('so_bac'))}"
     elif loai == "luoi_cot":
         name = f"luoi_cot_{_num_name(g('nhip'))}x{_num_name(g('dai_nha'))}_{_num_name(g('buoc_cot'))}"
+    elif loai == "ve_tu_do":
+        h = spec.get("hinh") if isinstance(spec.get("hinh"), list) else []
+        name = f"ve_tu_do_{len(h)}hinh_{sum(len(x.get('phan_tu', [])) for x in h if isinstance(x, dict) and isinstance(x.get('phan_tu'), list))}pt"
     elif loai == "xa_go":
         name = f"xa_go_{_num_name(g('nhip'))}x{_num_name(g('dai_nha'))}_{_num_name(g('buoc_cot'))}_{_num_name(g('buoc_xa_go'))}"
     else:
@@ -170,8 +176,17 @@ def auto_name(loai: str, spec: dict) -> str:
 
 
 def guide(loai: str):
+    if loai == "ve_tu_do":
+        import guide_e
+        import spec_e
+        ex = json.load(open(os.path.join(HERE, "examples", EXAMPLE[loai]), encoding="utf-8-sig"))
+        ex.pop("ten", None)
+        ex.pop("loai", None)
+        g = guide_e.guide()
+        g["tham_so_bo_cuc_mac_dinh"] = dict(spec_e.DEFAULT_PARAMS_E)
+        return dict(loai=loai, **g, vi_du_spec=ex)
     if loai not in GUIDE:
-        return dict(hop_le=False, loi=[f"loai = {loai!r} không hợp lệ. Dùng một trong: thang, luoi_cot, khung_ngang, xa_go."])
+        return dict(hop_le=False, loi=[f"loai = {loai!r} không hợp lệ. Dùng một trong: thang, luoi_cot, khung_ngang, xa_go, ve_tu_do."])
     import spec_a
     import spec_b
     import spec_c
@@ -187,12 +202,20 @@ def guide(loai: str):
 
 def _derived(loai, sp, D):
     import spec_c
+    import spec_e
     import spec_d
     if loai == "thang":
         return dict(chieu_cao_bac_h_mm=sp["h"], chieu_cao_bac_dang_so=(f"{sp['cao_tang'] / sp['so_bac']:.4f}"), so_mat_bac=sp["n_treads"], chieu_dai_ve_mm=sp["L"],
                     goc_doc_do=round(sp["theta_deg"], 2), hai_h_cong_b_mm=round(sp["two_h_b"], 1))
     if loai == "luoi_cot":
         return dict(so_truc_doc_N=sp["so_truc_doc"], so_cot=2 * sp["so_truc_doc"], buoc_cot_mm=sp["buoc_cot"], dai_nha_mm=sp["dai_nha"], nhip_mm=sp["nhip"])
+    if loai == "ve_tu_do":
+        import collections
+        v = sp["views"][0]
+        c = collections.Counter(e["t"] for e in v["elems"])
+        return dict(so_phan_tu=sp["n_elements"], theo_loai=dict(c), hinh=v["ten"],
+                    phong=[dict(id=e["id"], ten=e["ten"], dien_tich_m2=spec_e.fmt2(e["dien_tich"])) for e in v["elems"] if e["t"] == "phong"],
+                    so_cua_di=c.get("cua_di", 0), so_cua_so=c.get("cua_so", 0), so_kich_thuoc=c.get("kich_thuoc", 0))
     if loai == "xa_go":
         return dict(so_truc_doc_N=sp["so_truc_doc"], so_cot=2 * sp["so_truc_doc"], chieu_dai_mat_doc_mm=round(sp["L"], 1), so_khoang_n=sp["n"], so_xa_go_moi_mai=sp["n"] + 1, tong_so_xa_go=sp["n_purlins_total"],
                     khoang_cach_thuc_mm=sp["real_spacing_text"], khoang_cach_chieu_mm=spec_d.fmt_len(sp["proj_spacing"]), goc_doc_do=round(sp["theta_deg"], 2), so_mai=sp["so_mai"])
@@ -202,10 +225,11 @@ def _derived(loai, sp, D):
 
 def check(loai: str, spec_path: str, write_spec: str | None, profile: str | None):
     if loai not in LOAI:
-        return dict(hop_le=False, loi=[f"loai = {loai!r} không hợp lệ. Dùng một trong: thang, luoi_cot, khung_ngang, xa_go."])
+        return dict(hop_le=False, loi=[f"loai = {loai!r} không hợp lệ. Dùng một trong: thang, luoi_cot, khung_ngang, xa_go, ve_tu_do."])
     try:
-        if os.path.getsize(spec_path) > MAX_SPEC_BYTES:
-            return dict(hop_le=False, loai=loai, loi=[f"spec quá lớn (> {MAX_SPEC_BYTES} byte)."])
+        lim = MAX_SPEC_BYTES_E if loai == "ve_tu_do" else MAX_SPEC_BYTES
+        if os.path.getsize(spec_path) > lim:
+            return dict(hop_le=False, loai=loai, loi=[f"spec quá lớn (> {lim} byte)."])
         def _bad_const(c):
             raise ValueError("NaN/Infinity")
         raw = json.load(open(spec_path, encoding="utf-8-sig"), parse_constant=_bad_const)
@@ -254,13 +278,15 @@ def check(loai: str, spec_path: str, write_spec: str | None, profile: str | None
     import build_b
     import build_c
     import build_d
+    import build_e
     import spec_a
     import spec_b
     import spec_c
     import spec_d
+    import spec_e
     from spec_b import SpecError
     from tcvn import ProfileError, read_profile
-    validate, build = {"A": (spec_a.validate, build_a.build), "B": (spec_b.validate, build_b.build), "C": (spec_c.validate, build_c.build), "D": (spec_d.validate, build_d.build)}[k]
+    validate, build = {"A": (spec_a.validate, build_a.build), "B": (spec_b.validate, build_b.build), "C": (spec_c.validate, build_c.build), "D": (spec_d.validate, build_d.build), "E": (spec_e.validate, build_e.build)}[k]
     try:
         sp = validate(spec)
         D = build(sp, read_profile(profile))

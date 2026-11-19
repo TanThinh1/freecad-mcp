@@ -51,7 +51,7 @@ async def main():
                 d, n_img, err = payload(res)
                 return d, n_img, err, dt
 
-            cases = [("thang", "a2_3000x17"), ("luoi_cot", "b2_12000x30000"), ("khung_ngang", "c5_11000x6000_le"), ("xa_go", "d1_12000x30000_2mai")]
+            cases = [("thang", "a2_3000x17"), ("luoi_cot", "b2_12000x30000"), ("khung_ngang", "c5_11000x6000_le"), ("xa_go", "d1_12000x30000_2mai"), ("ve_tu_do", "e2_nha_cap4")]
             for loai, ex in cases:
                 d, _, err, dt = await call("huong_dan_ve", {"loai": loai})
                 print(f"huong_dan_ve({loai}): {dt:.2f}s keys={sorted(d)[:6]} loi={err}")
@@ -61,7 +61,8 @@ async def main():
             bad = {"thang": {"cao_tang": -5, "so_bac": 1, "be_rong_mat_bac": 250, "be_rong_ve": 800, "dam_con": "H75x150x2"},
                    "luoi_cot": {"nhip": 16500, "dai_nha": 31750, "buoc_cot": 6000, "tiet_dien_cot": "H300x150x6x9"},
                    "khung_ngang": {"nhip": 0, "cao_cot": 6000, "do_doc_mai": 120, "so_mai": 3, "tiet_dien_cot": "abc", "tiet_dien_keo": "H250x125x6x9"},
-                   "xa_go": {"nhip": 12000, "dai_nha": 30000, "buoc_cot": 6000, "do_doc_mai": 15, "so_mai": 3, "buoc_xa_go": 1500}}
+                   "xa_go": {"nhip": 12000, "dai_nha": 30000, "buoc_cot": 6000, "do_doc_mai": 15, "so_mai": 3, "buoc_xa_go": 1500},
+                   "ve_tu_do": {"hinh": [{"id": "H1", "ten": "X", "phan_tu": [{"loai": "tuong", "id": "W1", "diem": [[0, 0], [4000, 0]], "day": 0}]}]}}
             for loai, sp_ in bad.items():
                 d, _, err, dt = await call("kiem_tra_spec", {"loai": loai, "spec": sp_})
                 print(f"kiem_tra_spec(LOI {loai}): {dt:.2f}s hop_le={d.get('hop_le')} loi={d.get('loi')}")
