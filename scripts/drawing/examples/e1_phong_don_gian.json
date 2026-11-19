@@ -1,0 +1,169 @@
+{
+ "loai": "E",
+ "ten": "e1_phong_don_gian",
+ "ty_le": "auto",
+ "hinh": [
+  {
+   "id": "MB1",
+   "ten": "MẶT BẰNG PHÒNG NGỦ",
+   "phan_tu": [
+    {
+     "loai": "truc",
+     "truc_dung": [
+      {
+       "ten": "1",
+       "x": 0
+      },
+      {
+       "ten": "2",
+       "x": 4000
+      }
+     ],
+     "truc_ngang": [
+      {
+       "ten": "A",
+       "y": 0
+      },
+      {
+       "ten": "B",
+       "y": 3600
+      }
+     ]
+    },
+    {
+     "loai": "tuong",
+     "id": "W1",
+     "diem": [
+      [
+       0,
+       0
+      ],
+      [
+       4000,
+       0
+      ],
+      [
+       4000,
+       3600
+      ],
+      [
+       0,
+       3600
+      ]
+     ],
+     "kin": true,
+     "day": 220
+    },
+    {
+     "loai": "cua_di",
+     "id": "D1",
+     "tuong": "W1",
+     "doan": 0,
+     "vi_tri": 500,
+     "rong": 900,
+     "ban_le": "dau",
+     "mo_ve": "trai"
+    },
+    {
+     "loai": "cua_so",
+     "id": "S1",
+     "tuong": "W1",
+     "doan": 2,
+     "vi_tri": 1100,
+     "rong": 1500,
+     "ky_hieu": "kep"
+    },
+    {
+     "loai": "phong",
+     "id": "P1",
+     "ten": "PHÒNG NGỦ",
+     "da_giac": [
+      [
+       110,
+       110
+      ],
+      [
+       3890,
+       110
+      ],
+      [
+       3890,
+       3490
+      ],
+      [
+       110,
+       3490
+      ]
+     ]
+    },
+    {
+     "loai": "noi_that_co_ban",
+     "id": "G1",
+     "kieu": "giuong",
+     "vi_tri": [
+      2290,
+      1490
+     ]
+    },
+    {
+     "loai": "noi_that_co_ban",
+     "id": "T1",
+     "kieu": "tu",
+     "vi_tri": [
+      300,
+      2800
+     ],
+     "xoay": 0
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K1",
+     "kieu": "ngang",
+     "tham_chieu": [
+      "truc:1",
+      "truc:2"
+     ],
+     "phia": "duoi"
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K2",
+     "kieu": "doc",
+     "tham_chieu": [
+      "truc:A",
+      "truc:B"
+     ],
+     "phia": "phai"
+    },
+    {
+     "loai": "mui_ten_bac",
+     "vi_tri": [
+      4900,
+      3300
+     ],
+     "goc": 0
+    },
+    {
+     "loai": "ghi_chu",
+     "chu": [
+      "GHI CHÚ:",
+      "TƯỜNG GẠCH DÀY 220 MM"
+     ],
+     "vi_tri": [
+      -600,
+      -1300
+     ],
+     "can": "trai"
+    }
+   ]
+  }
+ ],
+ "khung_ten": {
+  "don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP",
+  "cong_trinh": "NHÀ Ở GIA ĐÌNH",
+  "chu_dau_tu": "ÔNG NGUYỄN VĂN A",
+  "loai_ho_so": "BVTC",
+  "ngay": "22/11/2026",
+  "ten_ban_ve": "MẶT BẰNG PHÒNG"
+ }
+}

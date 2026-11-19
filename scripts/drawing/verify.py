@@ -315,6 +315,9 @@ def check_dxf(C: Checks, D, sp, profile, dxf: str, do_fc: bool):
     elif D.kind == "D":
         import verify_d
         verify_d.check_dxf_d(C, D, sp, dx)
+    elif D.kind == "E":
+        import verify_e
+        verify_e.check_dxf_e(C, D, sp, dx)
     else:
         import verify_a
         verify_a.check_dxf_a(C, D, sp, dx)
@@ -367,6 +370,9 @@ def check_dwg(C: Checks, D, dx_src: dict, dwg: str, workdir: str, dwg_info: dict
     if D.kind == "D" and sp is not None:
         import verify_d
         verify_d.check_dwg_d(C, D, sp, bx)
+    if D.kind == "E" and sp is not None:
+        import verify_e
+        verify_e.check_dwg_e(C, D, sp, bx)
 
 
 # ------------------------------------------------------------------ 4/5. PDF
@@ -497,13 +503,16 @@ def check_pdf(C: Checks, D, sp, dx: dict, pdf: str, png: str | None, profile: di
     cen = [p for p in paths if _straight(p) and len(p["dash"]) == 4]
     want = [abs(x) for x in LTYPES["CENTER"][1]]
     n_center = sum(1 for p in D.prims if isinstance(p, Line) and profile[p.layer]["ltype"] == "CENTER")
-    pat_ok = bool(cen) and all(all(close(x, y, 0.15) for x, y in zip(p["dash"], want)) for p in cen)
-    C.add(5, "5.4", "nét CENTER: số lượng = số đường layer CENTER của primitives, mẫu nét 12 / 1,5 / 2 / 1,5 mm", len(cen) == n_center and n_center > 0 and pat_ok,
+    pat_ok = (bool(cen) or (D.kind == "E" and n_center == 0)) and all(all(close(x, y, 0.15) for x, y in zip(p["dash"], want)) for p in cen)
+    C.add(5, "5.4", "nét CENTER: số lượng = số đường layer CENTER của primitives, mẫu nét 12 / 1,5 / 2 / 1,5 mm", len(cen) == n_center and (n_center > 0 or D.kind == "E") and pat_ok,
           f"PDF {len(cen)} / primitives {n_center}; mẫu {[round(x, 2) for x in cen[0]['dash']] if cen else None}")
     check_title_fit_pdf(C, D, paths)
     if D.kind == "D":
         import verify_d
         verify_d.check_pdf_d(C, D, sp, dx, paths, profile)
+    if D.kind == "E":
+        import verify_e
+        verify_e.check_pdf_e(C, D, sp, dx, paths, profile)
     ok, bad, wr, n_digit = pdf_text_match(D, paths)
     ntext = sum(1 for p in D.prims if isinstance(p, Text))
     C.add(5, "5.5", "mỗi chuỗi chữ (kể cả khung tên) có nét chữ đúng vị trí; số có ≥ 3 chữ số đúng độ rộng nét chữ", ok == ntext and not wr,
@@ -514,7 +523,8 @@ def check_pdf(C: Checks, D, sp, dx: dict, pdf: str, png: str | None, profile: di
     n_m, bad_v = greedy_match(vals, dim_lines, lambda v, p: close(max(p["bb"][2] - p["bb"][0], p["bb"][3] - p["bb"][1]), v, TOL_PDF))
     dxt = collections.Counter(t for lay, t in dx["texts"] if lay == LAYER_DIM)
     want_t = collections.Counter(p.s for p in D.prims if isinstance(p, Text) and p.tag.startswith("dim_") and p.tag.endswith("_text"))
-    C.add(5, "5.6", "mỗi kích thước có đường kích thước PDF dài đúng (± 0,06 mm × tỷ lệ) và chữ tương ứng trong DXF", bool(vals) and n_m == len(vals) and dxt == want_t,
+    if D.kind != "E":          # type E draws its dimensions as tagged lines (no Dim objects): they are verified by 1.54 / 2.31 / 5.20
+        C.add(5, "5.6", "mỗi kích thước có đường kích thước PDF dài đúng (± 0,06 mm × tỷ lệ) và chữ tương ứng trong DXF", bool(vals) and n_m == len(vals) and dxt == want_t,
           f"{n_m}/{len(vals)} đường khớp (giá trị thật {sorted(set(round(d.value, 2) for d in D.dims))}); chữ DXF {dict(dxt)}")
     return a
 
@@ -686,6 +696,9 @@ def run_all(D, sp, profile, files: dict, do_fc=True, do_dwg=True, do_pdf=True, d
     elif D.kind == "D":
         import verify_d
         verify_d.check_primitives_d(C, D, sp)
+    elif D.kind == "E":
+        import verify_e
+        verify_e.check_primitives_e(C, D, sp)
     else:
         check_primitives_b(C, D, sp)
     check_title_rows(C, D, sp)
