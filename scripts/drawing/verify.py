@@ -18,7 +18,7 @@ import oda
 import titleblock as TBK
 from dxf_render import expected_counts
 from primitives import Circle, Line, Rect, Text, cap_to_em, fmt_value
-from readers import analyze_pdf, f, read_dxf
+from readers import analyze_pdf, f, read_dxf, unesc
 from tcvn import LAYER_AXIS, LAYER_COLUMN, LAYER_DIM, LTYPES, SHEETS, layer_style
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -238,7 +238,7 @@ def dxf_geometry_diff(dx: dict, D) -> dict:
                 ents[("LWPOLYLINE", e["layer"])].append((min(xs), min(ys), max(xs), max(ys)))
             elif e["type"] == "TEXT":
                 px, py = ((f(r, 11), f(r, 21)) if 11 in r else (f(r, 10), f(r, 20)))
-                ents[("TEXT", e["layer"])].append((px, py, f(r, 40), f(r, 50) if 50 in r else 0.0))
+                ents[("TEXT", e["layer"])].append((px, py, f(r, 40), f(r, 50) if 50 in r else 0.0, f(r, 41) if 41 in r else 1.0))
         except (KeyError, ValueError, IndexError):
             pass
     res = {}
@@ -259,7 +259,7 @@ def dxf_geometry_diff(dx: dict, D) -> dict:
             key = ("CIRCLE", p.layer)
         else:
             c = T(p.pos)
-            near = lambda e, g, c=c, p=p: close(g[0], c[0], TOL_DXF) and close(g[1], c[1], TOL_DXF) and close(g[2], p.h * s, TOL_DXF) and close(g[3], p.rot, 1e-6)
+            near = lambda e, g, c=c, p=p: close(g[0], c[0], TOL_DXF) and close(g[1], c[1], TOL_DXF) and close(g[2], p.h * s, TOL_DXF) and close(g[3], p.rot, 1e-6) and close(g[4], p.wf, 1e-6)
             key = ("TEXT", p.layer)
         pool = ents[key]
         ok = False
@@ -359,6 +359,7 @@ def check_dwg(C: Checks, D, dx_src: dict, dwg: str, workdir: str, dwg_info: dict
           "; ".join(f"{k} {a}/{t}" for k, (a, t) in sorted(gd.items())))
     C.add(3, "3.6", "$LTSCALE và mẫu nét giữ nguyên sau khứ hồi", close(bx["ltscale"], D.scale, 1e-9) and all(bx["ltypes"].get(k) == [float(x) for x in v[1]] for k, v in LTYPES.items()),
           f"LTSCALE {bx['ltscale']:g}; {bx['ltypes'].get('CENTER')}")
+    check_title_fit_dxf(C, D, bx, 3, "3.7", "DWG (đọc lại sau khứ hồi)")
 
 
 # ------------------------------------------------------------------ 4/5. PDF
@@ -404,7 +405,7 @@ def pdf_text_match(D, paths):
     n_digit = 0
     for t in (p for p in D.prims if isinstance(p, Text)):
         em = cap_to_em(t.h)
-        w = TBK.est_width(t.s, em, t.bold)
+        w = TBK.est_width(t.s, em, t.bold) * t.wf
         ax, ay = t.pos
         off = {"left": w / 2, "center": 0.0, "right": -w / 2}[t.halign]
         phi = math.radians(t.rot)
@@ -492,6 +493,7 @@ def check_pdf(C: Checks, D, sp, dx: dict, pdf: str, png: str | None, profile: di
     pat_ok = bool(cen) and all(all(close(x, y, 0.15) for x, y in zip(p["dash"], want)) for p in cen)
     C.add(5, "5.4", "nét CENTER: số lượng = số đường layer CENTER của primitives, mẫu nét 12 / 1,5 / 2 / 1,5 mm", len(cen) == n_center and n_center > 0 and pat_ok,
           f"PDF {len(cen)} / primitives {n_center}; mẫu {[round(x, 2) for x in cen[0]['dash']] if cen else None}")
+    check_title_fit_pdf(C, D, paths)
     ok, bad, wr, n_digit = pdf_text_match(D, paths)
     ntext = sum(1 for p in D.prims if isinstance(p, Text))
     C.add(5, "5.5", "mỗi chuỗi chữ (kể cả khung tên) có nét chữ đúng vị trí; số có ≥ 3 chữ số đúng độ rộng nét chữ", ok == ntext and not wr,
@@ -525,20 +527,106 @@ def check_title_rows(C: Checks, D, sp):
         if r.get("ho_ten"):
             exp[f"row{k}_name"] = r["ho_ten"]
             exp[f"row{k}_date"] = r.get("ngay", "")
-    got = {k: v for k, v in D.fields.items() if k.startswith("row")}
+    got_raw = {k: v for k, v in D.fields.items() if k.startswith("row")}
+    got = {k: (v + " " + got_raw[k + "_2"] if k + "_2" in got_raw else v) for k, v in got_raw.items() if not k.endswith("_2")}      # a long name may be printed on two lines
+    lay = TBK.layout(D.fields)
     fields_ok = got == {k: v for k, v in exp.items() if v}
     date_ok = all(re.fullmatch(r"\d\d/\d\d/\d{4}", v) and (date is None or v == date) for k, v in got.items() if k.endswith("_date"))
     left = [p for p in D.prims if isinstance(p, Text) and p.tag == "tb_text" and sh.tb_x0 <= p.pos[0] <= sh.tb_x0 + 90 and sh.tb_y1 - 16 - 49 <= p.pos[1] <= sh.tb_y1 - 16]
     inside = True
-    printed_ok = len(left) == len(got)                      # exactly the expected texts are printed in the left block, nothing else
-    for name, val in got.items():
-        ax, ay = TBK.field_anchor(name, sh)
+    printed_ok = len(left) == len(got_raw)                  # exactly the expected texts are printed in the left block, nothing else
+    for name, val in got_raw.items():
+        ax, ay = TBK.field_anchor(name, sh, lay[name]["dy"])
         printed_ok &= any(p.s == val and close(p.pos[0], ax, 1e-6) and close(p.pos[1], ay, 1e-6) for p in left)
     nonempty_roles = sum(1 for k, v in got.items() if k.endswith("_role") and v)
     default_filled = kt.get("ky_nguon") != "mac_dinh" or nonempty_roles == 3
     C.add(1, "1.30", "khung tên, khối trái (ô 8-14): mặc định có 3 nhãn chức danh + tên mẫu + ngày của bản vẽ; khi spec nêu thì đúng theo spec; mọi chữ nằm trong khối trái",
           ok_rows and fields_ok and date_ok and inside and printed_ok and default_filled,
           f"nguồn {kt.get('ky_nguon')}; {nonempty_roles} hàng có nhãn; ô {got}; đủ chữ trong khung tên {printed_ok}; nằm trong khối trái {inside}")
+
+
+def _fit_problems(cells, s, ax, ay, h, wf, halign):
+    """Why a title-block text (string s, anchor, cap height h, width factor wf) does not stay inside its cell, per the worst-case estimate; [] when it fits."""
+    em = cap_to_em(h)
+    w = TBK.cons_width(s, em, wf)
+    cell = [c for c in cells if c[0] <= ax <= c[2] and c[1] < ay <= c[3]]
+    if not cell:
+        return ["không nằm trong ô nào"]
+    c = cell[0]
+    x0, x1 = {"left": (ax, ax + w), "center": (ax - w / 2, ax + w / 2), "right": (ax - w, ax)}[halign]
+    bad = []
+    if x0 < c[0] + TBK.TB_MARGIN - 1e-6 or x1 > c[2] - TBK.TB_MARGIN + 1e-6:
+        bad.append(f"rộng {w:.1f} mm (thận trọng) tràn ô {c[2] - c[0]:g} mm (lề {TBK.TB_MARGIN:g} mm)")
+    if em < TBK.MIN_EM - 1e-6 or not (TBK.MIN_WF - 1e-6 <= wf <= 1.0 + 1e-6):
+        bad.append(f"cỡ chữ {em:.2f} mm, hệ số rộng {wf:g} ngoài giới hạn ({TBK.MIN_EM:g} mm, {TBK.MIN_WF:g})")
+    if ay < c[1] + 0.3 or ay + h > c[3] - 0.5:
+        bad.append("chữ chạm mép trên/dưới của ô")
+    return bad
+
+
+def check_title_fit(C: Checks, D):
+    """1.31: every text printed in a title-block cell (names, date, project, investor, firm, title, symbol, scale, captions) stays inside its cell minus a 1.5 mm margin
+    on each side by the worst-case estimate (every character 1 em wide, independent of the machine's font), with em size >= 2 mm and width factor in [0.7, 1]."""
+    sh = SHEETS[D.sheet]
+    cells = TBK.all_cells(sh)
+    tx = [p for p in D.prims if isinstance(p, Text) and p.tag in ("tb_text", "tb_caption")]
+    bad = [(t.s, b) for t in tx for b in [_fit_problems(cells, t.s, t.pos[0], t.pos[1], t.h, t.wf, t.halign)] if b]
+    n_fit = sum(1 for t in tx if t.wf < 1.0 - 1e-9 or abs(cap_to_em(t.h) - TBK.FIELDS.get(t.field, (0, 0, 0, cap_to_em(t.h)))[3]) > 1e-6)
+    C.add(1, "1.31", "chữ trong mọi ô khung tên không vượt bề rộng ô (ước lượng thận trọng, lề 1,5 mm); co chữ: hệ số rộng ≥ 0,7, cao ≥ 2 mm", bool(tx) and not bad,
+          f"{len(tx)} chữ trong khung tên, {n_fit} chữ đã co; vi phạm: {bad[:3]}")
+
+
+def check_title_fit_dxf(C: Checks, D, dx: dict, group: int, cid: str, label: str):
+    """Same rule on the TEXT entities of a DXF (code 41 = width factor), converted back to sheet mm: every title-block TEXT inside its cell."""
+    sh = SHEETS[D.sheet]
+    cells = TBK.all_cells(sh)
+    s = D.scale
+    ox, oy = D.origin
+    n, bad = 0, []
+    for e in dx["ents"]:
+        if e["type"] != "TEXT":
+            continue
+        r = e["rec"]
+        try:
+            ax, ay = ((f(r, 11), f(r, 21)) if 11 in r else (f(r, 10), f(r, 20)))
+            ax, ay = ax / s + ox, ay / s + oy
+            if not (sh.tb_x0 <= ax <= sh.tb_x0 + sh.tb_w and sh.tb_y0 <= ay <= sh.tb_y1):
+                continue
+            h = f(r, 40) / s
+            wf = f(r, 41) if 41 in r else 1.0
+            ha = {0: "left", 1: "center", 2: "right"}.get(int(float(r[72][0])) if 72 in r else 0, "left")
+            txt = unesc("".join(r.get(3, [])) + (r.get(1) or [""])[0])
+        except (KeyError, ValueError, IndexError):
+            continue
+        n += 1
+        b = _fit_problems(cells, txt, ax, ay, h, wf, ha)
+        if b:
+            bad.append((txt, b))
+    want = sum(1 for p in D.prims if isinstance(p, Text) and p.tag in ("tb_text", "tb_caption"))
+    C.add(group, cid, f"chữ khung tên trong {label}: mọi TEXT nằm trong ô, không vượt bề rộng ô (ước lượng thận trọng, có xét hệ số rộng mã 41)", n == want and not bad,
+          f"{n}/{want} TEXT khung tên; vi phạm: {bad[:3]}")
+
+
+def check_title_fit_pdf(C: Checks, D, paths):
+    """5.7: measured in the PDF: no glyph outline of the title block crosses its cell border or comes within 1.5 mm of the left/right border (ink actually printed)."""
+    sh = SHEETS[D.sheet]
+    cells = TBK.all_cells(sh)
+    H = sh.h
+    glyphs = [p for p in paths if p["kind"] == "fill" and (p["bb"][2] - p["bb"][0]) < 60 and (p["bb"][3] - p["bb"][1]) < 25
+              and sh.tb_x0 <= (p["bb"][0] + p["bb"][2]) / 2 <= sh.tb_x0 + sh.tb_w and H - sh.tb_y1 <= (p["bb"][1] + p["bb"][3]) / 2 <= H - sh.tb_y0]
+    bad = []
+    for g in glyphs:
+        bb = g["bb"]
+        cx, cy = (bb[0] + bb[2]) / 2, H - (bb[1] + bb[3]) / 2
+        cell = [c for c in cells if c[0] <= cx <= c[2] and c[1] <= cy <= c[3]]
+        if not cell:
+            bad.append(("ngoài ô", tuple(round(x, 1) for x in bb)))
+            continue
+        c = cell[0]
+        m = TBK.TB_MARGIN - 0.35
+        if bb[0] < c[0] + m or bb[2] > c[2] - m or bb[1] < H - c[3] + 0.1 or bb[3] > H - c[1] - 0.1:
+            bad.append(("tràn ô", tuple(round(x, 1) for x in bb)))
+    C.add(5, "5.7", "đo trong PDF: nét chữ khung tên không chạm/vượt đường kẻ ô (cách lề trái/phải ≥ 1,5 mm)", bool(glyphs) and not bad, f"{len(glyphs)} nét chữ trong khung tên; vi phạm: {bad[:3]}")
 
 
 def run_all(D, sp, profile, files: dict, do_fc=True, do_dwg=True, do_pdf=True, dwg_info=None, model3d=None):
@@ -552,7 +640,9 @@ def run_all(D, sp, profile, files: dict, do_fc=True, do_dwg=True, do_pdf=True, d
     else:
         check_primitives_b(C, D, sp)
     check_title_rows(C, D, sp)
+    check_title_fit(C, D)
     dx = check_dxf(C, D, sp, profile, files["dxf"], do_fc)
+    check_title_fit_dxf(C, D, dx, 2, "2.13", "DXF")
     if do_dwg:
         check_dwg(C, D, dx, files["dwg"], files.get("work") or os.path.dirname(files["dxf"]), dwg_info or {})
     if do_pdf:

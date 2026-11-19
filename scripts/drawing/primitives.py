@@ -44,6 +44,8 @@ class Text(Prim):
     rot: float = 0.0      # degrees, counter-clockwise
     halign: str = "left"  # left | center | right
     bold: bool = False
+    wf: float = 1.0       # width factor (DXF code 41; 1 = font's normal width); also drawn in the PDF
+    field: str = ""       # title-block field name (tb_text), "" otherwise
 
 
 @dataclass(kw_only=True)
@@ -151,7 +153,7 @@ def prim_bbox(p: Prim):
         return min(p.p0[0], p.p1[0]), min(p.p0[1], p.p1[1]), max(p.p0[0], p.p1[0]), max(p.p0[1], p.p1[1])
     if isinstance(p, Circle):
         return p.c[0] - p.r, p.c[1] - p.r, p.c[0] + p.r, p.c[1] + p.r
-    w = est_width(p.s, cap_to_em(p.h), p.bold)
+    w = est_width(p.s, cap_to_em(p.h), p.bold) * p.wf
     off = {"left": (0.0, w), "center": (-w / 2, w / 2), "right": (-w, 0.0)}[p.halign]
     a, b, lo, hi = off[0], off[1], -0.3 * p.h, 1.4 * p.h
     import math

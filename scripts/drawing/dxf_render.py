@@ -29,7 +29,7 @@ def render_dxf(D: Drawing, profile: dict, path: str) -> str:
         elif isinstance(p, Circle):
             d.circle(p.layer, T(p.c), p.r * s)
         elif isinstance(p, Text):
-            d.text(p.layer, p.s, T(p.pos), p.h * s, rot=p.rot, style=STYLE, halign=p.halign)
+            d.text(p.layer, p.s, T(p.pos), p.h * s, rot=p.rot, style=STYLE, halign=p.halign, wf=p.wf)
         else:
             raise TypeError(f"unsupported primitive {type(p).__name__}")
     return d.save(path)

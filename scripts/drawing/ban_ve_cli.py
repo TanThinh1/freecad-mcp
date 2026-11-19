@@ -43,7 +43,7 @@ KHUNG_TEN = ("khung_ten (tùy chọn): {don_vi_tk, cong_trinh, chu_dau_tu, ten_b
              "ky: [{chuc_danh, ho_ten}], chu_tri / kiem_tra / thiet_ke (true = chỉ in nhãn chức danh ở ô 8-14; chuỗi = họ tên do người dùng cung cấp). MẶC ĐỊNH khi spec không nói gì: "
              "3 nhãn Chủ trì / Kiểm tra / Thiết kế với tên MẪU (NGUYỄN VĂN A, TRẦN VĂN B, LÊ VĂN C) và ngày của bản vẽ; ky_mau: false = để trống khối này; "
              "hệ thống KHÔNG tự bịa tên người); tối đa 7 dòng. ky_hieu_ban_ve mặc định theo loại (thang KC-03, luoi_cot KC-01, khung_ngang KC-02). "
-             "Chuỗi dài hơn ô khung tên sẽ báo lỗi (không tự thu nhỏ chữ); dùng dấu | để ngắt dòng.")
+             "Chữ trong ô khung tên tự co cho vừa ô (hệ số rộng tối thiểu 0,7, rồi cao tối thiểu 2 mm, rồi ngắt 2 dòng nếu ô đủ chỗ); vẫn không vừa thì báo lỗi, khi đó hãy rút gọn hoặc dùng dấu | để ngắt dòng.")
 COMMON_RULES = [
     "SỐ BẮT BUỘC (thiếu thì HỎI LẠI khách, không tự bịa): thang = cao_tang, so_bac, be_rong_ve; luoi_cot = nhip, dai_nha, buoc_cot; khung_ngang = nhip, cao_cot, do_doc_mai, so_mai. "
     "Các số còn lại có giá trị mặc định (xem mac_dinh); kiem_tra_spec trả da_dung_mac_dinh để nói rõ với khách.",

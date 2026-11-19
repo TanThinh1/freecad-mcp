@@ -83,10 +83,13 @@ class Dxf:
     def rect(self, layer, x0, y0, x1, y1):
         self.lwpolyline(layer, [(x0, y0), (x1, y0), (x1, y1), (x0, y1)], closed=True)
 
-    def text(self, layer, s, pos, height, rot=0.0, style="STANDARD", halign="left"):
+    def text(self, layer, s, pos, height, rot=0.0, style="STANDARD", halign="left", wf=1.0):
         self._grow(pos)
         hj = {"left": 0, "center": 1, "right": 2}[halign]
-        sub = [(100, "AcDbText"), (10, pos[0]), (20, pos[1]), (30, 0.0), (40, height), (1, self._e(s)), (50, rot), (7, style)]
+        sub = [(100, "AcDbText"), (10, pos[0]), (20, pos[1]), (30, 0.0), (40, height), (1, self._e(s)), (50, rot)]
+        if abs(wf - 1.0) > 1e-9:
+            sub.append((41, float(wf)))                    # relative X scale (width factor)
+        sub.append((7, style))
         if hj:
             sub += [(72, hj), (11, pos[0]), (21, pos[1]), (31, 0.0)]
         sub += [(100, "AcDbText"), (73, 0)]

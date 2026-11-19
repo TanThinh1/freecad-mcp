@@ -31,6 +31,7 @@ import spec_b  # noqa: E402
 import spec_c  # noqa: E402
 from dxf_render import render_dxf  # noqa: E402
 from pdf_render import symbol_svg  # noqa: E402
+from primitives import cap_to_em  # noqa: E402
 from spec_b import SpecError, load_spec  # noqa: E402
 from tcvn import SHEETS, ProfileError, read_profile  # noqa: E402
 
@@ -77,7 +78,8 @@ def render_pdf(D, profile, outdir: str, work: str, name: str, timeout: int = 300
     job = dict(template=os.path.join(work, f"{name}_template.svg"), symbol=os.path.join(work, f"{name}_symbol.svg"), texts=D.fields, sheet=D.sheet, sheet_w=sheet.w, sheet_h=sheet.h,
                pdf=os.path.join(outdir, f"{name}.pdf"), svg=os.path.join(work, f"{name}_techdraw.svg"), log=os.path.join(work, f"{name}_freecad.log"))
     _rm(job["pdf"], job["svg"], job["log"])           # never accept a stale result from a previous run
-    TBK.write_template(job["template"], sheet)
+    fit = {p.field: (cap_to_em(p.h), p.wf, p.pos) for p in D.prims if p.tag == "tb_text"}        # the primitives decide size / width factor of every title-block text
+    TBK.write_template(job["template"], sheet, fit)
     open(job["symbol"], "w", encoding="utf-8").write(symbol_svg(D, profile))
     jp = os.path.join(work, f"{name}_job.json")
     json.dump(job, open(jp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
