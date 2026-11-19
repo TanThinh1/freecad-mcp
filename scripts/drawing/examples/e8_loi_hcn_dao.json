@@ -1,0 +1,176 @@
+{
+ "loai": "E",
+ "ten": "e8_loi_hcn_dao",
+ "ty_le": "1:50",
+ "kho_giay": "auto",
+ "khung_ten": {
+  "don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP",
+  "cong_trinh": "NHÀ Ở GIA ĐÌNH CẤP 4",
+  "chu_dau_tu": "ÔNG NGUYỄN VĂN A",
+  "loai_ho_so": "BVTC",
+  "ngay": "22/11/2026",
+  "ten_ban_ve": "MẶT CẮT 1-1"
+ },
+ "hinh": [
+  {
+   "id": "H1",
+   "ten": "MẶT CẮT 1-1",
+   "phan_tu": [
+    {
+     "loai": "lop_vat_lieu",
+     "id": "NEN",
+     "goc": [
+      -600,
+      -300
+     ],
+     "huong": "ngang",
+     "dai": 4200,
+     "lop": [
+      {
+       "vat_lieu": "dat",
+       "day": 150
+      },
+      {
+       "vat_lieu": "be_tong",
+       "day": 100
+      },
+      {
+       "vat_lieu": "vua",
+       "day": 50
+      }
+     ],
+     "tong_day": 300
+    },
+    {
+     "loai": "lop_vat_lieu",
+     "id": "TUONG",
+     "goc": [
+      0,
+      0
+     ],
+     "huong": "dung",
+     "dai": 3000,
+     "lop": [
+      {
+       "vat_lieu": "vua",
+       "day": 15
+      },
+      {
+       "vat_lieu": "gach",
+       "day": 200
+      },
+      {
+       "vat_lieu": "vua",
+       "day": 15
+      }
+     ],
+     "tong_day": 230
+    },
+    {
+     "loai": "san",
+     "id": "SAN",
+     "hcn": [
+      3000,
+      3000,
+      -100,
+      3120
+     ]
+    },
+    {
+     "loai": "mai",
+     "id": "MAI",
+     "kieu": "1_mai",
+     "tu": [
+      -300,
+      3320
+     ],
+     "nhip": 3000,
+     "do_doc": 20,
+     "day": 80,
+     "vuon": 300
+    },
+    {
+     "loai": "cao_do",
+     "vi_tri": [
+      5300,
+      -300
+     ],
+     "huong": "phai"
+    },
+    {
+     "loai": "cao_do",
+     "vi_tri": [
+      4300,
+      0
+     ],
+     "huong": "phai"
+    },
+    {
+     "loai": "cao_do",
+     "vi_tri": [
+      4300,
+      3000
+     ],
+     "huong": "phai"
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K1",
+     "kieu": "chuoi",
+     "huong": "doc",
+     "tham_chieu": [
+      "NEN:nam",
+      0,
+      "SAN:nam",
+      "SAN:bac"
+     ],
+     "phia": "trai",
+     "lop": 1
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K2",
+     "kieu": "doc",
+     "tham_chieu": [
+      "NEN:nam",
+      "SAN:bac"
+     ],
+     "phia": "trai",
+     "lop": 2
+    },
+    {
+     "loai": "ghi_chu_dan",
+     "chu": [
+      "VỮA TRÁT 15"
+     ],
+     "diem": [
+      8,
+      1500
+     ],
+     "vi_tri": [
+      900,
+      1700
+     ]
+    },
+    {
+     "loai": "ghi_chu_dan",
+     "chu": [
+      "BÊ TÔNG LÓT"
+     ],
+     "diem": [
+      1500,
+      -200
+     ],
+     "vi_tri": [
+      2200,
+      -900
+     ]
+    }
+   ],
+   "mo_cao": {
+    "y": 0,
+    "cao_m": 0.0
+   }
+  }
+ ]
+}

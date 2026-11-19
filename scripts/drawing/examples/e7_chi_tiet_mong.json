@@ -1,0 +1,139 @@
+{
+ "loai": "E",
+ "ten": "e7_chi_tiet_mong",
+ "ty_le": "1:20",
+ "kho_giay": "auto",
+ "khung_ten": {
+  "don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP",
+  "cong_trinh": "NHÀ Ở GIA ĐÌNH CẤP 4",
+  "chu_dau_tu": "ÔNG NGUYỄN VĂN A",
+  "loai_ho_so": "BVTC",
+  "ngay": "22/11/2026",
+  "ten_ban_ve": "CHI TIẾT MÓNG ĐƠN M1"
+ },
+ "hinh": [
+  {
+   "id": "H1",
+   "ten": "CHI TIẾT MÓNG ĐƠN M1",
+   "phan_tu": [
+    {
+     "loai": "mong_don",
+     "id": "M1",
+     "goc": [
+      0,
+      -1100
+     ],
+     "dai_lot": 1300,
+     "day_lot": 100,
+     "dai_mong": 1100,
+     "day_mong": 300,
+     "dai_co": 300,
+     "cao_co": 700
+    },
+    {
+     "loai": "lop_vat_lieu",
+     "id": "NEN1",
+     "goc": [
+      -400,
+      -100
+     ],
+     "huong": "ngang",
+     "dai": 900,
+     "lop": [
+      {
+       "vat_lieu": "be_tong",
+       "day": 100
+      }
+     ]
+    },
+    {
+     "loai": "lop_vat_lieu",
+     "id": "NEN2",
+     "goc": [
+      800,
+      -100
+     ],
+     "huong": "ngang",
+     "dai": 900,
+     "lop": [
+      {
+       "vat_lieu": "be_tong",
+       "day": 100
+      }
+     ]
+    },
+    {
+     "loai": "cot_chi_tiet",
+     "id": "CT",
+     "hcn": [
+      3200,
+      -400,
+      3500,
+      0
+     ],
+     "bao_ve": 25,
+     "d": 16,
+     "n_tren": 2,
+     "n_duoi": 2
+    },
+    {
+     "loai": "cao_do",
+     "vi_tri": [
+      2300,
+      -1100
+     ],
+     "huong": "phai"
+    },
+    {
+     "loai": "cao_do",
+     "vi_tri": [
+      2300,
+      0
+     ],
+     "huong": "phai"
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K1",
+     "kieu": "ngang",
+     "tham_chieu": [
+      "M1:tay",
+      "M1:dong"
+     ],
+     "phia": "duoi",
+     "lop": 1
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K2",
+     "kieu": "doc",
+     "tham_chieu": [
+      "M1:nam",
+      "M1:bac"
+     ],
+     "phia": "trai",
+     "lop": 1
+    },
+    {
+     "loai": "ghi_chu_dan",
+     "chu": [
+      "BÊ TÔNG LÓT M100",
+      "DÀY 100 MM"
+     ],
+     "diem": [
+      100,
+      -1050
+     ],
+     "vi_tri": [
+      -700,
+      -1500
+     ]
+    }
+   ],
+   "mo_cao": {
+    "y": 0,
+    "cao_m": 0.0
+   }
+  }
+ ]
+}

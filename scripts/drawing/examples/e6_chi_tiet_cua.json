@@ -1,0 +1,102 @@
+{
+ "loai": "E",
+ "ten": "e6_chi_tiet_cua",
+ "ty_le": "1:10",
+ "kho_giay": "auto",
+ "khung_ten": {
+  "don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP",
+  "cong_trinh": "NHÀ Ở GIA ĐÌNH CẤP 4",
+  "chu_dau_tu": "ÔNG NGUYỄN VĂN A",
+  "loai_ho_so": "BVTC",
+  "ngay": "22/11/2026",
+  "ten_ban_ve": "CHI TIẾT CỬA ĐI D1"
+ },
+ "hinh": [
+  {
+   "id": "H1",
+   "ten": "CHI TIẾT CỬA ĐI D1",
+   "phan_tu": [
+    {
+     "loai": "cua_dung",
+     "id": "CD",
+     "hcn": [
+      0,
+      0,
+      900,
+      2200
+     ],
+     "kieu": "di",
+     "ban_le": "trai"
+    },
+    {
+     "loai": "lop_vat_lieu",
+     "id": "NGUONG",
+     "goc": [
+      -100,
+      -150
+     ],
+     "huong": "ngang",
+     "dai": 1100,
+     "lop": [
+      {
+       "vat_lieu": "be_tong",
+       "day": 100
+      },
+      {
+       "vat_lieu": "vua",
+       "day": 50
+      }
+     ]
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K1",
+     "kieu": "ngang",
+     "tham_chieu": [
+      "CD:tay",
+      "CD:dong"
+     ],
+     "phia": "tren",
+     "lop": 1
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K2",
+     "kieu": "doc",
+     "tham_chieu": [
+      "CD:nam",
+      "CD:bac"
+     ],
+     "phia": "phai",
+     "lop": 1
+    },
+    {
+     "loai": "ghi_chu_dan",
+     "chu": [
+      "CÁNH CỬA GỖ"
+     ],
+     "diem": [
+      450,
+      1100
+     ],
+     "vi_tri": [
+      1300,
+      1400
+     ]
+    },
+    {
+     "loai": "cao_do",
+     "vi_tri": [
+      1500,
+      0
+     ],
+     "huong": "phai"
+    }
+   ],
+   "mo_cao": {
+    "y": 0,
+    "cao_m": 0.0
+   }
+  }
+ ]
+}
