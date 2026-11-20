@@ -422,4 +422,40 @@ def labels2(sp, view, W, X):
                 W.place(f"cut_text:{e['id']}", "CHU", e["ten"], h, [(pos, al, 0.0)], who, exclude_tag=f"cut_arm:{e['id']}")
 
 
+LEVEL_TOL = Fraction(1)      # mm: a level mark within this distance of a datum height counts as on it
+
+
+def datum_heights(view):
+    """heights (mm) of the datums of one view: reference level mo_cao, floor / beam / column / footing / door edges, layer boundaries, roof top and underside, railing, stair steps."""
+    ys = {(view.get("mo_cao") or (Fraction(0), Fraction(0)))[0]}
+    for e in view["elems"]:
+        t = e["t"]
+        if t == "mai":
+            ys.update(q[1] for q in e["top"] + e["bottom"])
+        elif t == "lop_vat_lieu":
+            ys.update(v for r in e["rects"] for v in (r[1], r[3]))
+        elif t == "mong_don":
+            ys.update(v for _, r in e["rects"] for v in (r[1], r[3]))
+        elif t == "lan_can":
+            ys.update((e["tu"][1], e["tu"][1] + e["cao"]))
+        elif t == "bac_thang_don_gian":
+            ys.update(q[1] for q in e["pts"])
+        elif t in ("san", "dam", "cot_mc", "mat_tuong_dung", "cot_chi_tiet", "cua_dung"):
+            ys.update((e["box"][1], e["box"][3]))
+    return ys
+
+
+def check_levels(view, ctx):
+    """Soft warning: a level mark (cao_do) whose height matches no datum of the same view."""
+    ys = datum_heights(view)
+    for e in view["elems"]:
+        if e["t"] != "cao_do":
+            continue
+        y = e["vi_tri"][1]
+        if any(abs(y - d) <= LEVEL_TOL for d in ys):
+            continue
+        near = min(ys, key=lambda d: abs(d - y))
+        ctx.warnings.append(f"{e['path']}: ký hiệu cao độ tại vi_tri [{S.fnum(e['vi_tri'][0])}, {S.fnum(y)}] (y = {S.fnum(y)} mm) không trùng mốc nào của hình (mo_cao, mặt sàn, mép dầm, đỉnh mái, đỉnh/chân cấu kiện) trong ±{S.fnum(LEVEL_TOL)} mm; mốc gần nhất y = {S.fnum(near)} mm ({S.EXTENT_NOTE}); cần người thiết kế xác nhận.")
+
+
 S.CATALOG.update(NEW)

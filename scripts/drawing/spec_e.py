@@ -715,6 +715,7 @@ def validate(spec) -> dict:
                     ctx.warnings.append(f"{fe['path']}: nội thất {fe['id']!r} nằm trong vùng quét của cánh cửa đi {de['id']!r} (cánh + cung mở 90°): cửa không mở hết được; dịch nội thất hoặc đổi chiều mở (cảnh báo mềm, bản vẽ vẫn dựng).")
     for view in views:
         elems3.check_pipes(view, ctx)
+        elems2.check_levels(view, ctx)
     for view in views:
         legs_ops = {}
         for e in view["elems"]:

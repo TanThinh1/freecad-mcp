@@ -73,9 +73,9 @@ def add_expected(view, s, P, sh, tx):
             for k, (typ, kind, name) in enumerate(legend_rows(view)):
                 y = cy - (10.0 + 7.0 * k) * s
                 if typ == "sym":
-                    sh.extend(symbol_shapes(kind, 0, cx + 4.0 * s, y, s, "legend"))
+                    sh.extend(symbol_shapes(kind, 0, cx + 10.5 * s, y, s, "legend"))
                 else:
-                    sh.append(("legend", PIPE[kind][1], "seg", ((cx + 0.5 * s, y), (cx + 8.5 * s, y))))
+                    sh.append(("legend", PIPE[kind][1], "seg", ((cx + 0.5 * s, y), (cx + 20.5 * s, y))))
                 tx.append(("CHU", name))
 
 
@@ -104,3 +104,58 @@ def check_phase3(C, D, sp, tol=1e-6):
     has_title = [p for p in D.prims if isinstance(p, Text) and p.tag.startswith("legend_title:")]
     C.add(1, "1.77", "chú giải tự sinh: đúng các ký hiệu và loại đường đã dùng, theo thứ tự cố định (ký hiệu điện, nước rồi loại đường), mỗi dòng một chữ, có tiêu đề CHÚ GIẢI khi có phần tử chu_giai",
           [p.s for p in drawn] == want and (len(has_title) == 1) == bool(any(e["t"] == "chu_giai" for e in view["elems"])), f"mong đợi {want}; có {[p.s for p in drawn]}; tiêu đề {len(has_title)}")
+
+
+# ------------------------------------------------------------------ linetype of the legend samples (read from the DXF / DWG read-back, not from the spec)
+LINETYPE_OF_PIPE = {"day_dien": "CENTER", "ong_cap": "CONTINUOUS", "ong_thoat": "HIDDEN"}
+
+
+def _line_at(dx, a, b, tol=1e-3):
+    for e in dx["ents"]:
+        if e["type"] != "LINE":
+            continue
+        r = e["rec"]
+        try:
+            p, q = (float(r[10][0]), float(r[20][0])), (float(r[11][0]), float(r[21][0]))
+        except (KeyError, ValueError, IndexError):
+            continue
+        for u, v in ((p, q), (q, p)):
+            if abs(u[0] - a[0]) <= tol and abs(u[1] - a[1]) <= tol and abs(v[0] - b[0]) <= tol and abs(v[1] - b[1]) <= tol:
+                return e
+    return None
+
+
+def _linetype(dx, e):
+    own = (e["rec"].get(6) or [None])[0]
+    name = own if own and own.upper() != "BYLAYER" else dx["layers"].get(e["layer"], {}).get("ltype", "?")
+    return str(name).upper()
+
+
+def check_legend_linetypes(C, D, sp, dx, group, cid, where):
+    """Each pipe / wire row of the legend: its sample line has the SAME linetype as the real line of that type, both equal the expected linetype, and the sample is long enough to show one whole pattern."""
+    view = sp["views"][0]
+    s = D.scale
+    leg = [e for e in view["elems"] if e["t"] == "chu_giai"]
+    bad, n = [], 0
+    for e in leg:
+        cx, cy = F(e["vi_tri"][0]), F(e["vi_tri"][1])
+        for k, (typ, kind, name) in enumerate(legend_rows(view)):
+            if typ != "pipe":
+                continue
+            n += 1
+            y = cy - (10.0 + 7.0 * k) * s
+            sample = _line_at(dx, (cx + 0.5 * s, y), (cx + 20.5 * s, y))
+            real = next((q for q in view["elems"] if q["t"] == "ong" and q["loai_ong"] == kind), None)
+            real_line = _line_at(dx, (F(real["diem"][0][0]), F(real["diem"][0][1])), (F(real["diem"][1][0]), F(real["diem"][1][1]))) if real else None
+            if sample is None or real_line is None:
+                bad.append(f"{kind}: không thấy nét {'mẫu' if sample is None else 'thật'}")
+                continue
+            lt_s, lt_r = _linetype(dx, sample), _linetype(dx, real_line)
+            if lt_s != lt_r or lt_s != LINETYPE_OF_PIPE[kind]:
+                bad.append(f"{kind}: mẫu {lt_s}, đường thật {lt_r}, cần {LINETYPE_OF_PIPE[kind]}")
+                continue
+            pat = next((v for k2, v in dx["ltypes"].items() if k2.upper() == lt_s), [])
+            period = sum(abs(x) for x in pat) * dx["ltscale"]
+            if pat and 20.0 * s + 1e-6 < period:
+                bad.append(f"{kind}: mẫu dài {20.0 * s:.0f} mm < một chu kỳ nét {period:.0f} mm (trông như nét liền)")
+    C.add(group, cid, f"{where}: kiểu nét mẫu trong chú giải (dây điện, ống cấp, ống thoát) đúng bằng kiểu nét đường thật cùng loại (đọc từ thực thể và bảng lớp, không từ spec) và mẫu đủ dài để hiện trọn một chu kỳ nét", not bad, f"{n} dòng loại đường; sai: {bad[:3]}")

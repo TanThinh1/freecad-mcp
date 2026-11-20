@@ -113,6 +113,12 @@ def e7c_variant(raw):                      # footing detail + a column section (
     raw["hinh"][0]["phan_tu"].append(dict(loai="cot_chi_tiet", id="CT", hcn=[3200, -400, 3500, 0], bao_ve=25, d=16, n_tren=2, n_duoi=2))
 
 
+def e4lv_variant(raw):                     # a level mark at +5.400 while the ridge is at 4650
+    for e in raw["hinh"][0]["phan_tu"]:
+        if e["loai"] == "cao_do" and e["vi_tri"][1] == 4650:
+            e["vi_tri"][1] = 5400
+
+
 def warn2_variant(raw):
     raw["hinh"][0]["phan_tu"] += [dict(loai="lan_can", id="LC", tu=[7200, 0], dai=1500, cao=800, buoc=500), dict(loai="bac_thang_don_gian", id="BT", tu=[9600, 0], so_bac=4, cao_bac=200, rong_bac=250)]
 
@@ -121,7 +127,7 @@ def main():
     profile = read_profile()
     S = {"e1": load("e1_phong_don_gian", profile), "e2": load("e2_nha_cap4", profile), "e1r": load("e1_phong_don_gian", profile, raw_variant), "e1w": load("e1_phong_don_gian", profile, warn_variant),
          "e4": load("e4_mat_dung_nha_cap4", profile), "e5": load("e5_mat_cat_1_1", profile), "e5x": load("e5_mat_cat_1_1", profile, x_variant), "e7": load("e7_chi_tiet_mong", profile),
-         "e5w": load("e5_mat_cat_1_1", profile, warn2_variant),
+         "e5w": load("e5_mat_cat_1_1", profile, warn2_variant), "e4lv": load("e4_mat_dung_nha_cap4", profile, e4lv_variant),
          "e6": load("e6_chi_tiet_cua", profile), "e9": load("e9_so_do_dien_phong", profile), "e10": load("e10_so_do_cap_thoat_nuoc", profile), "e2c": load("e2_nha_cap4", profile, e2c_variant), "e4h": load("e4_mat_dung_nha_cap4", profile, e4h_variant), "e7c": load("e7_chi_tiet_mong", profile, e7c_variant)}
     work = os.path.join(OUT, "_mutations_e")
     shutil.rmtree(work, ignore_errors=True)
@@ -213,6 +219,16 @@ def main():
     add("legend_rows_in_the_wrong_order", "e9", lambda D: [setattr(T(D, "legend_text:o_cam")[0], "s", "CÔNG TẮC"), setattr(T(D, "legend_text:cong_tac")[0], "s", "Ổ CẮM")], {"1.77"}, None)
     add("legend_title_deleted", "e10", lambda D: D.prims.remove(T(D, "legend_title:")[0]), {"1.77", "1.55"}, {"2.32"})
     add("legend_lists_an_unused_symbol", "e9", lambda D: D.prims.append(Text(layer="CHU", tag="legend_text:van", s="VAN", pos=(T(D, "legend_text:den")[0].pos[0], T(D, "legend_text:den")[0].pos[1] - 60.0), h=2.5)), {"1.77", "1.55"}, {"2.32"})
+    # ---- 22/11 fixes: legend line samples 2.37, level marks against datums 1.61
+    add("legend_sample_chain_line_drawn_on_a_continuous_layer", "e9", lambda D: setattr(L(D, "legend_line:day_dien")[0], "layer", "NET-MANH"), {"1.76"}, {"2.37"})
+    add("legend_sample_shortened_to_8mm_looks_continuous", "e9", lambda D: setattr(L(D, "legend_line:day_dien")[0], "p2", (L(D, "legend_line:day_dien")[0].p1[0] + 8.0, L(D, "legend_line:day_dien")[0].p1[1])), {"1.76"}, {"2.37"})
+    add("legend_sample_of_drain_pipe_on_the_chain_layer", "e10", lambda D: setattr(L(D, "legend_line:ong_thoat")[0], "layer", "NET-TAM"), {"1.76"}, {"2.37"})
+    add("legend_sample_of_supply_pipe_on_the_dashed_layer", "e10", lambda D: setattr(L(D, "legend_line:ong_cap")[0], "layer", "NET-KHUAT"), {"1.76"}, {"2.37"})
+    add("real_wire_on_a_continuous_layer_but_legend_says_chain", "e9", lambda D: setattr(L(D, "ong:D_BD_CT")[0], "layer", "NET-MANH"), {"1.74"}, {"2.37"})
+    add("level_warning_missing_for_a_mark_off_every_datum", "e4lv", lambda D: D.info.__setitem__("warnings", []), {"1.61"})
+    add("level_warning_naming_the_wrong_element", "e4lv", lambda D: D.info.__setitem__("warnings", [w.replace("phan_tu[13]", "phan_tu[12]") for w in D.info["warnings"]]), {"1.61"})
+    add("level_warning_without_the_tcvn_disclaimer", "e4lv", lambda D: D.info.__setitem__("warnings", [w.replace("KHÔNG phải điều khoản TCVN", "theo quy định") for w in D.info["warnings"]]), {"1.61"})
+    add("level_warning_spurious_for_a_mark_on_the_ridge", "e4", lambda D: D.info.__setitem__("warnings", ["hinh[0].phan_tu[13] (loai='cao_do'): ký hiệu cao độ tại vi_tri [10500, 4650] không trùng mốc nào (kinh nghiệm thực tế, KHÔNG phải điều khoản TCVN)"]), {"1.61"})
     # ---- phase 2: 1.63 hatch
     add("hatch_line_deleted", "e5", lambda D: D.prims.remove(H(D, 3)), {"1.63"}, {"2.36"})
     add("hatch_line_moved_0.5mm_near_miss", "e5", lambda D: shift(D, H(D, 5), 0.5, 0.0), {"1.63"}, {"2.36"})

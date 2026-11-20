@@ -181,6 +181,37 @@ def soft_warning_ids(view):
     return out
 
 
+def level_warning_idx(view):
+    """indices of the level marks (cao_do) whose height is within 1 mm of no datum of the view; datums recomputed here from the raw parameters (not from the validator's boxes)."""
+    ys = [F(view["mo_cao"][0]) if view.get("mo_cao") else 0.0]
+    for e in view["elems"]:
+        t = e["t"]
+        if t == "mai":
+            i = float(e["do_doc"] or 0)
+            y0, nh, v, d = F(e["tu"][1]), F(e["nhip"]), F(e["vuon"]), F(e["day"])
+            tops = {"bang": [y0], "1_mai": [y0 - v * i, y0 + (nh + v) * i], "2_mai": [y0 - v * i, y0 + nh / 2 * i]}[e["kieu"]]
+            ys += tops + [y - d for y in tops]
+        elif t == "lop_vat_lieu":
+            y = F(e["goc"][1])
+            if e["huong"] == "ngang":
+                ys.append(y)
+                for _, th in e["layers"]:
+                    y += F(th)
+                    ys.append(y)
+            else:
+                ys += [y, y + F(e["dai"])]
+        elif t == "mong_don":
+            y = F(e["goc"][1])
+            ys += [y, y + F(e["day_lot"]), y + F(e["day_lot"]) + F(e["day_mong"]), y + F(e["day_lot"]) + F(e["day_mong"]) + F(e["cao_co"])]
+        elif t == "lan_can":
+            ys += [F(e["tu"][1]), F(e["tu"][1]) + F(e["cao"])]
+        elif t == "bac_thang_don_gian":
+            ys += [F(e["tu"][1]) + F(e["h"]) * k for k in range(int(e["n"]) + 1)]
+        elif t in ("san", "dam", "cot_mc", "mat_tuong_dung", "cot_chi_tiet", "cua_dung"):
+            ys += [F(e["box"][1]), F(e["box"][3])]
+    return [e["idx"] for e in view["elems"] if e["t"] == "cao_do" and not any(abs(F(e["vi_tri"][1]) - y) <= 1.0 + 1e-9 for y in ys)]
+
+
 def check_phase2(C, D, sp, tol=1e-6):
     """Measured rules on the drawn primitives (real mm)."""
     view = sp["views"][0]

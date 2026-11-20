@@ -28,7 +28,8 @@ SYMBOLS = {
 PIPES = {"day_dien": ("DÂY ĐIỆN", "NET-TAM"), "ong_cap": ("ỐNG CẤP NƯỚC", "NET-CHINH"), "ong_thoat": ("ỐNG THOÁT NƯỚC", "NET-KHUAT")}
 NUT_R = 0.6                 # paper mm, radius of a junction dot
 LEG_PITCH, LEG_TITLE = 7.0, 10.0     # paper mm: row pitch of the legend, space under its title
-LEG_SYM_DX, LEG_TEXT_DX = 4.0, 11.0
+LEG_SAMPLE = 20.0          # paper mm: length of the sample line of a legend row; must show a whole CENTER pattern (12 + 1.5 + 2 + 1.5 = 17 mm), else a chain line looks continuous
+LEG_SYM_DX, LEG_TEXT_DX = 10.5, 24.0
 
 
 def rot(x, y, k):
@@ -133,7 +134,7 @@ def geom(sp, view, W, X):
                 if typ == "sym":
                     add_symbol(W, f"legend_sym:{kind}", kind, 0, ax + LEG_SYM_DX, y)
                 else:
-                    W.line(PIPES[kind][1], f"legend_line:{kind}", (ax + 0.5, y), (ax + 8.5, y))
+                    W.line(PIPES[kind][1], f"legend_line:{kind}", (ax + 0.5, y), (ax + 0.5 + LEG_SAMPLE, y))
 
 
 def labels3(sp, view, W, X):

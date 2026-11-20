@@ -2,7 +2,7 @@
 the wall bodies and their outline (edge splitting + point sampling, not the builder's coordinate compression), measured dimension values from the references, areas by the shoelace
 formula, label strings; fixed paper sizes (bubbles, ticks, offsets) are multiplied by the scale. The expected geometry (real mm) is compared in BOTH directions with the drawn primitives
 (1.50-1.54), with the LINE / LWPOLYLINE / CIRCLE entities of the DXF (2.30-2.32), of the DXF read back from the DWG (3.20) and with the strokes of the PDF (5.20). Text rules are
-measured with the real Arial widths (as check 1.45 of type D): no text box crosses a drawn line (0.3 mm), no two text boxes overlap. New ids only: 1.50-1.69 (phase 2: 1.63-1.69), 2.30-2.36, 3.20-3.25, 5.20.
+measured with the real Arial widths (as check 1.45 of type D): no text box crosses a drawn line (0.3 mm), no two text boxes overlap. New ids only: 1.50-1.69 (phase 2: 1.63-1.69), 2.30-2.37, 3.20-3.26, 5.20 (2.37 / 3.26: legend line samples, verify_e3; 1.78: level marks vs datum heights).
 """
 from __future__ import annotations
 
@@ -574,9 +574,13 @@ def check_primitives_e(C: Checks, D, sp):
     soft = [w for w in got_w if "vùng quét của cánh cửa" in w]
     ok_pairs = len(soft) == len(pairs) and all(any(f"{a!r}" in w and f"{b!r}" in w for w in soft) for a, b in pairs)
     got_w = [w for w in got_w if "vùng quét của cánh cửa" not in w]
-    ok_w = ok_pairs and len(got_w) == len(w_exp) and all(any(f"{i!r}" in w or f"id={i!r}" in w for w in got_w) for i in w_exp) and all("KHÔNG phải điều khoản TCVN" in w for w in got_w)
-    C.add(1, "1.61", "cảnh báo mềm (cửa đi hẹp hơn 700 mm, tường dày ngoài 100-500 mm, lan can/bậc thang ngoài khoảng thường dùng: kinh nghiệm thực tế, không phải điều khoản TCVN; nội thất nằm trong vùng quét của cánh cửa đi): đúng phần tử, không thừa không thiếu", ok_w,
-          f"cần {w_exp}; nội thất-cửa {pairs}; có {len(got_w)} cảnh báo + {len(soft)} cảnh báo vùng quét")
+    lv_exp = verify_e2.level_warning_idx(view)
+    lv = [w for w in got_w if "ký hiệu cao độ" in w]
+    ok_lv = len(lv) == len(lv_exp) and all(any(f"phan_tu[{i}]" in w for w in lv) for i in lv_exp) and all("KHÔNG phải điều khoản TCVN" in w for w in lv)
+    got_w = [w for w in got_w if "ký hiệu cao độ" not in w]
+    ok_w = ok_pairs and ok_lv and len(got_w) == len(w_exp) and all(any(f"{i!r}" in w or f"id={i!r}" in w for w in got_w) for i in w_exp) and all("KHÔNG phải điều khoản TCVN" in w for w in got_w)
+    C.add(1, "1.61", "cảnh báo mềm (cửa đi hẹp hơn 700 mm, tường dày ngoài 100-500 mm, lan can/bậc thang ngoài khoảng thường dùng: kinh nghiệm thực tế, không phải điều khoản TCVN; nội thất nằm trong vùng quét của cánh cửa đi; ký hiệu cao độ không trùng mốc nào của hình): đúng phần tử, không thừa không thiếu", ok_w,
+          f"cần {w_exp}; nội thất-cửa {pairs}; cao độ lệch mốc {lv_exp}; có {len(got_w)} cảnh báo + {len(soft)} cảnh báo vùng quét + {len(lv)} cảnh báo cao độ")
     check_centering(C, D)
     check_leaders(C, D)
     check_bubbles(C, D)
@@ -850,6 +854,7 @@ def dxf_text_boxes_named(dx):
 def check_dxf_e(C: Checks, D, sp, dx):
     dxf_checks(C, D, sp, dx, 2, ("2.30", "2.31", "2.32", "2.35", "2.36"), "DXF")
     dxf_text_rules(C, D, dx, 2, "2.33", "DXF")
+    verify_e3.check_legend_linetypes(C, D, sp, dx, 2, "2.37", "DXF")
     s = D.scale
     nz = [e for e in dx["ents"] if e["type"] == "LINE" and math.hypot(f(e["rec"], 11) - f(e["rec"], 10), f(e["rec"], 21) - f(e["rec"], 20)) < 1e-9]
     keys = collections.Counter((e["layer"], round(f(e["rec"], 10), 4), round(f(e["rec"], 20), 4), round(f(e["rec"], 11), 4), round(f(e["rec"], 21), 4)) for e in dx["ents"] if e["type"] == "LINE")
@@ -860,6 +865,7 @@ def check_dxf_e(C: Checks, D, sp, dx):
 def check_dwg_e(C: Checks, D, sp, bx):
     dxf_checks(C, D, sp, bx, 3, ("3.20", "3.21", "3.22", "3.24", "3.25"), "DWG (đọc lại sau khứ hồi)")
     dxf_text_rules(C, D, bx, 3, "3.23", "DWG (đọc lại sau khứ hồi)")
+    verify_e3.check_legend_linetypes(C, D, sp, bx, 3, "3.26", "DWG (đọc lại sau khứ hồi)")
 
 
 # ------------------------------------------------------------------ 5. PDF
