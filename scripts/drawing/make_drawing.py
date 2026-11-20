@@ -191,6 +191,8 @@ def make(spec_path: str, out_root: str, profile_path: str | None, do_pdf=True, d
             else:
                 skipped.append("3d")
         res["warnings"] = D.info.get("warnings", [])
+        if D.info.get("nhan_ha_co"):
+            res["nhan_ha_co"] = D.info["nhan_ha_co"]      # labels placed after a smaller text height / margin: id, old and new height and margin
         t = time.perf_counter()
         dwg_ok = bool(dwg_info and dwg_info.get("ok"))
         C = verify.run_all(D, sp, profile, dict(files, work=work), do_fc=do_fc, do_dwg=do_dwg and dwg_ok, do_pdf=do_pdf and pdf_ok, dwg_info=dwg_info, model3d=model3d)

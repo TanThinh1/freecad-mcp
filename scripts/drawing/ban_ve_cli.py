@@ -297,6 +297,9 @@ def check(loai: str, spec_path: str, write_spec: str | None, profile: str | None
     sc = f"1:{D.scale}"
     if D.info.get("scale_plan") and D.info["scale_plan"] != D.scale:
         sc = f"mặt cắt 1:{D.scale}, mặt bằng 1:{D.info['scale_plan']}"
+    da_dung = da_dung + [dict(ten=f"{r['loai']}:{r['id']}", gia_tri=dict(cao=r["cao_moi"], le_chu=r["le_moi"]),
+                              y_nghia=f"nhãn {r['ten']!r}: không đặt được ở mặc định (cao {r['cao_cu']:g} mm, lề chữ {r['le_cu']:g} mm) nên tự dùng cao {r['cao_moi']:g} mm, lề chữ {r['le_moi']:g} mm")
+                         for r in D.info.get("nhan_ha_co", [])]
     res = dict(hop_le=True, loai=loai, ten=ten, kho_giay=D.info.get("sheet", "A3"), ty_le=sc, bo_cuc=D.info.get("layout"), ly_do=D.info["reason"], so_do=_derived(loai, sp, D),
                canh_bao=canh_bao_them + list(D.info.get("warnings", [])) + list(D.info.get("notes", [])), da_dung_mac_dinh=da_dung, thu_muc_ket_qua=f"out\\{ten}\\")
     if k in ("C", "D"):

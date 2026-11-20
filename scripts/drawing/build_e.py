@@ -32,6 +32,10 @@ NEEDED_LAYERS = ("TRUC", "TRUC-KYHIEU", "NET-CHINH", "NET-MANH", "NET-KHUAT", "N
 
 
 DIM_MARGIN = 0.4          # paper mm between a dimension label and a line (labels sit right beside their own lines and the extension lines of the neighbours)
+ROOM_NAME_STEPS = (3.5, 3.0, 2.5)     # paper mm: a room name that does not fit steps down this list; never below ROOM_NAME_MIN
+ROOM_NAME_MIN = 2.5
+MARGIN_STEPS = (1.0, 0.5)           # paper mm: smaller text margins tried after `le_chu` (the independent check 1.56 only demands 0.3)
+GRID_STEP, GRID_N = 1.5, 8           # furniture label: extra positions on a 1.5 mm grid, up to 12 mm paper around the furniture
 TEXT_GAP = 0.2            # paper mm kept free between two text boxes (the boxes already include descenders and Vietnamese marks)
 HALIGN = {"trai": "left", "giua": "center", "phai": "right"}
 
@@ -119,6 +123,7 @@ class Sheetwork:
 
     def __init__(self, P, s):
         self.P, self.s, self.prims, self.boxes, self.box_tags = P, s, [], [], []
+        self.lowered = []      # labels placed only after a smaller text height / margin (reported to the user)
 
     def add(self, p):
         self.prims.append(p)
@@ -134,6 +139,8 @@ class Sheetwork:
             if exclude_tag and p.tag.startswith(exclude_tag):
                 continue
             if isinstance(p, Line):
+                if max(p.p1[0], p.p2[0]) < box[0] - m or min(p.p1[0], p.p2[0]) > box[2] + m or max(p.p1[1], p.p2[1]) < box[1] - m or min(p.p1[1], p.p2[1]) > box[3] + m:
+                    continue                  # farther than m on one axis, so the gap is >= m (same result, much faster)
                 if _seg_rect_gap(p.p1, p.p2, box) < m:
                     return p.tag or "nét"
             elif isinstance(p, Rect):
@@ -421,6 +428,7 @@ def build_dims(sp, view, W, X, ext):
 
 # ------------------------------------------------------------------ labels
 def build_labels(sp, view, W, X):
+    from spec_e import point_in_polygon
     P = sp["params"]
     hn, ha, hf = P["cao_chu_ten_phong"], P["cao_chu_ghi_chu"], P["cao_chu_noi_that"]
     elems2.labels2(sp, view, W, X)
@@ -432,22 +440,36 @@ def build_labels(sp, view, W, X):
         if t == "phong":
             cx, cy = X(e["nhan"][0]), X(e["nhan"][1])
             area = f"DT: {fmt2(e['dien_tich'])} m²"
-            from spec_e import point_in_polygon
-            spots = [(0.0, 0.0)] if e["vi_tri_nhan"] is not None else sorted(((dx * 3.0, dy * 3.0) for dx in range(-30, 31) for dy in range(-20, 21)), key=lambda q: (q[0] ** 2 + q[1] ** 2, q))
+            def in_room(lst):                      # spots whose centre lies in the room (only (0, 0) when vi_tri_nhan fixes the place)
+                if e["vi_tri_nhan"] is not None:
+                    return [(0.0, 0.0)]
+                return [(dx, dy) for dx, dy in lst if point_in_polygon((Fraction((cx + dx) * W.s).limit_denominator(10 ** 6), Fraction((cy + dy) * W.s).limit_denominator(10 ** 6)), e["da_giac"])]
+            spots = in_room(sorted(((dx * 3.0, dy * 3.0) for dx in range(-30, 31) for dy in range(-20, 21)), key=lambda q: (q[0] ** 2 + q[1] ** 2, q)))
+            fine = []                              # 1 mm grid, built only when the first try fails
+            sizes = [hn] + [h for h in ROOM_NAME_STEPS if ROOM_NAME_MIN <= h < hn]
+            margins = [P["le_chu"]] + [m for m in MARGIN_STEPS if m < P["le_chu"]]
             ok = False
-            for dx, dy in spots:
-                pos_n, pos_a = (cx + dx, cy + dy + 1.5), (cx + dx, cy + dy - 3.5)
-                mx, my = (cx + dx) * W.s, (cy + dy) * W.s
-                if e["vi_tri_nhan"] is None and not point_in_polygon((Fraction(mx).limit_denominator(10 ** 6), Fraction(my).limit_denominator(10 ** 6)), e["da_giac"]):
-                    continue
-                bn, ba = text_box(e["ten"], hn, pos_n, "center", 0.0, True), text_box(area, ha, pos_a, "center")
-                if not W.hits(bn) and not W.hits(ba) and not boxes_overlap(bn, ba, 0.3):
-                    W.text(f"room_name:{e['id']}", "CHU", e["ten"], hn, pos_n, "center", 0.0, True)
-                    W.text(f"room_area:{e['id']}", "CHU", area, ha, pos_a, "center")
-                    ok = True
+            for h in sizes:                        # (a) sweep the grid of spots, (b) then smaller text height, then smaller margin
+                for m in margins:
+                    first = (h, m) == (hn, P["le_chu"])
+                    if not first and not fine:
+                        fine = in_room(sorted(((dx * 1.0, dy * 1.0) for dx in range(-60, 61) for dy in range(-40, 41)), key=lambda q: (q[0] ** 2 + q[1] ** 2, q)))
+                    for dx, dy in (spots if first else fine):      # first try = old coarse grid; later tries = 1 mm grid
+                        pos_n, pos_a = (cx + dx, cy + dy + 1.5), (cx + dx, cy + dy - 3.5)
+                        bn, ba = text_box(e["ten"], h, pos_n, "center", 0.0, True), text_box(area, ha, pos_a, "center")
+                        if not W.hits(bn, m=m) and not W.hits(ba, m=m) and not boxes_overlap(bn, ba, 0.3):
+                            W.text(f"room_name:{e['id']}", "CHU", e["ten"], h, pos_n, "center", 0.0, True)
+                            W.text(f"room_area:{e['id']}", "CHU", area, ha, pos_a, "center")
+                            if h != hn or m != P["le_chu"]:
+                                W.lowered.append(dict(id=e["id"], ten=e["ten"], loai="ten_phong", cao_cu=hn, cao_moi=h, le_cu=P["le_chu"], le_moi=m))
+                            ok = True
+                            break
+                    if ok:
+                        break
+                if ok:
                     break
             if not ok:
-                raise Unplaceable(f"{who}: không đặt được nhãn phòng {e['ten']!r} và diện tích mà không chạm nét/chữ khác; nhập vi_tri_nhan hoặc dùng tỷ lệ lớn hơn")
+                raise Unplaceable(f"{who}: không đặt được nhãn phòng {e['ten']!r} và diện tích mà không chạm nét/chữ khác (đã thử cỡ chữ {hn:g} xuống {sizes[-1]:g} mm, lề chữ {P['le_chu']:g} xuống {margins[-1]:g} mm, quét lưới vị trí); nhập vi_tri_nhan hoặc dùng tỷ lệ lớn hơn")
         elif t == "noi_that_co_ban":
             b = e["box"]
             x0, y0, x1, y1 = X(b[0]), X(b[1]), X(b[2]), X(b[3])
@@ -456,7 +478,24 @@ def build_labels(sp, view, W, X):
             mx, my = (x0 + x1) / 2, (y0 + y1) / 2
             cands = [((mx, my - hf / 2), "center", 0.0), ((mx + hf / 2, my), "center", 90.0), ((x1 + 1.5, my - hf / 2), "left", 0.0), ((x0 - 1.5, my - hf / 2), "right", 0.0),
                      ((mx, y1 + 1.5), "center", 0.0), ((mx, y0 - 1.5 - hf), "center", 0.0)]
-            W.place(f"furn_label:{e['id']}", "CHU", lab, hf, cands, who)
+            cx_, cy_ = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+            room = next((q for q in view["elems"] if q["t"] == "phong" and point_in_polygon((Fraction(cx_).limit_denominator(10 ** 6), Fraction(cy_).limit_denominator(10 ** 6)), q["da_giac"])), None)
+            grid = sorted(((i * GRID_STEP, j * GRID_STEP) for i in range(-GRID_N, GRID_N + 1) for j in range(-GRID_N, GRID_N + 1) if i or j), key=lambda q: (q[0] ** 2 + q[1] ** 2, q))
+            for dx, dy in grid:                    # extra spots, kept in the room the furniture stands in
+                px, py = mx + dx, my + dy - hf / 2
+                if room is None or point_in_polygon((Fraction((px) * W.s).limit_denominator(10 ** 6), Fraction((py + hf / 2) * W.s).limit_denominator(10 ** 6)), room["da_giac"]):
+                    cands.append(((px, py), "center", 0.0))
+            for m in [P["le_chu"]] + [q for q in MARGIN_STEPS if q < P["le_chu"]]:
+                try:
+                    W.place(f"furn_label:{e['id']}", "CHU", lab, hf, cands, who, margin=m)
+                except Unplaceable as u:
+                    err = u
+                    continue
+                if m != P["le_chu"]:
+                    W.lowered.append(dict(id=e["id"], ten=lab, loai="nhan_noi_that", cao_cu=hf, cao_moi=hf, le_cu=P["le_chu"], le_moi=m))
+                break
+            else:
+                raise Unplaceable(f"{err} (đã thử lề chữ {P['le_chu']:g} xuống {min(P['le_chu'], MARGIN_STEPS[-1]):g} mm, cỡ chữ {hf:g} mm giữ nguyên vì dưới đó không có nấc chuẩn, quét thêm lưới vị trí quanh nội thất)")
         elif t in ("ghi_chu", "chu"):
             lines = e["dong"] if t == "ghi_chu" else [e["chu"]]
             x, y = X(e["vi_tri"][0]), X(e["vi_tri"][1])
@@ -494,7 +533,7 @@ def layout(sp, s):
     t_base = bottom - P["khoang_tieu_de"] - cap_t
     W.text("title", "CHU", title, cap_t, (xc, t_base), "center", 0.0, True)
     W.text("scale_note", "CHU", f"TỶ LỆ 1:{s}", cap_n, (xc, t_base - P["khoang_ghi_chu"] - cap_n * ARIAL_CAP), "center")
-    return W.prims, dict(title=title, extent=ge, ext_geom=ext)
+    return W.prims, dict(title=title, extent=ge, ext_geom=ext, nhan_ha_co=W.lowered)
 
 
 def _seg_dist(p, a, b):
@@ -583,5 +622,5 @@ def build(sp: dict, profile: dict) -> Drawing:
     D.prims.extend(TBK.primitives(D.fields, sheet))
     g = next((e for e in view["elems"] if e["t"] == "truc"), None)
     D.info = dict(scale=s, sheet=sheet_name, reason=reason, band="L", N=len(g["dung"]) if g else 0, n_columns=0, warnings=sp["warnings"], params=P, extents_paper=(w, hh),
-                  n_elements=sp["n_elements"], view_title=meta["title"])
+                  n_elements=sp["n_elements"], view_title=meta["title"], nhan_ha_co=meta.get("nhan_ha_co", []))
     return D
