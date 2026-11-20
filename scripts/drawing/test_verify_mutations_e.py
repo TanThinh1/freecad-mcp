@@ -373,7 +373,7 @@ def main():
     add("room_name_1.5mm_on_another_room", "n10", lambda D: setattr(T(D, "room_name:P2")[0], "h", 1.5), {"1.78"}, {"2.38"})
     add("room_name_2.4mm_just_under_the_minimum", "e1", lambda D: setattr(T(D, "room_name:P1")[0], "h", 2.4), {"1.78"}, {"2.38"})
     add("lowered_room_name_without_a_record", "n10", lambda D: D.info.update(nhan_ha_co=[]), {"1.78"})
-    add("record_with_a_wrong_new_height", "n10", lambda D: D.info["nhan_ha_co"][0].update(cao_moi=3.0), {"1.78"})
+    add("record_with_a_wrong_new_height", "n10", lambda D: D.info["nhan_ha_co"][0].update(cao_moi=3.5), {"1.78"})
     add("false_arithmetic_note", "e2", lambda D: setattr(T(D, "note:")[1], "s", "- 2 x 6 = 13 CỬA"), {"1.62", "1.55"}, {"2.12"})
 
     for name, key, fn, prim_ids, dxf_ids in cat:

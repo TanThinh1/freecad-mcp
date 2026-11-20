@@ -32,9 +32,9 @@ NEEDED_LAYERS = ("TRUC", "TRUC-KYHIEU", "NET-CHINH", "NET-MANH", "NET-KHUAT", "N
 
 
 DIM_MARGIN = 0.4          # paper mm between a dimension label and a line (labels sit right beside their own lines and the extension lines of the neighbours)
-ROOM_NAME_STEPS = (3.5, 3.0, 2.5)     # paper mm: a room name that does not fit steps down this list; never below ROOM_NAME_MIN
+ROOM_NAME_STEPS = (3.5, 2.5)          # paper mm: a room name that does not fit steps down this list; never below ROOM_NAME_MIN
 ROOM_NAME_MIN = 2.5
-MARGIN_STEPS = (1.0, 0.5)           # paper mm: smaller text margins tried after `le_chu` (the independent check 1.56 only demands 0.3)
+MARGIN_STEPS = (1.0,)              # paper mm: one smaller text margin tried after `le_chu` (the independent check 1.56 only demands 0.3)
 GRID_STEP, GRID_N = 1.5, 8           # furniture label: extra positions on a 1.5 mm grid, up to 12 mm paper around the furniture
 TEXT_GAP = 0.2            # paper mm kept free between two text boxes (the boxes already include descenders and Vietnamese marks)
 HALIGN = {"trai": "left", "giua": "center", "phai": "right"}
