@@ -262,6 +262,8 @@ def main(argv):
     if not args:
         print(__doc__)
         return 2
+    if prof:
+        os.environ["TCVN_PROFILE"] = prof            # the checks that read the profile themselves (verify_c) look at this variable; --profile wins over one already set
     results = []
     for sp in args:
         r = make(sp, out, prof, do_pdf="--no-pdf" not in argv, do_dwg="--no-dwg" not in argv, do_fc="--no-fc" not in argv, do_3d="--no-3d" not in argv)
