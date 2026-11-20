@@ -193,6 +193,24 @@ def polygon_area(poly) -> Fraction:
     return abs(s) / 2
 
 
+def door_sweep_hits(view, d, box) -> bool:
+    """True when the rectangle `box` meets the quarter disc swept by the leaf of the door element d (centre = hinge on the swing face, radius = rong). Exact."""
+    w = view["by_id"].get(d["tuong"])
+    if w is None:
+        return False
+    L = wall_legs(w)[d["doan"]]
+    v, r = d["vi_tri"], d["rong"]
+    th = v if d["ban_le"] == "dau" else v + r
+    off = L["hi"] if d["mo_ve"] == "trai" else L["lo"]
+    H = (L["a"][0] + L["d"][0] * th + L["n"][0] * off, L["a"][1] + L["d"][1] * th + L["n"][1] * off)
+    dc = L["d"] if d["ban_le"] == "dau" else (-L["d"][0], -L["d"][1])
+    sw = 1 if d["mo_ve"] == "trai" else -1
+    ns = (sw * L["n"][0], sw * L["n"][1])
+    cs = [((x - H[0]) * dc[0] + (y - H[1]) * dc[1], (x - H[0]) * ns[0] + (y - H[1]) * ns[1]) for x in (box[0], box[2]) for y in (box[1], box[3])]
+    u0, u1, v0, v1 = min(c[0] for c in cs), max(c[0] for c in cs), min(c[1] for c in cs), max(c[1] for c in cs)
+    return u1 > 0 and v1 > 0 and max(u0, 0) ** 2 + max(v0, 0) ** 2 < r * r
+
+
 def fmt2(v: Fraction) -> str:
     """Two decimals with a comma, rounded half up (exact)."""
     m = math.floor(v * 100 + Fraction(1, 2))
@@ -685,6 +703,11 @@ def validate(spec) -> dict:
                 e["nhan"] = c
             elif t == "phong":
                 e["nhan"] = e["vi_tri_nhan"]
+    for view in views:
+        for fe in (q for q in view["elems"] if q["t"] == "noi_that_co_ban"):
+            for de in (q for q in view["elems"] if q["t"] == "cua_di"):
+                if door_sweep_hits(view, de, fe["box"]):
+                    ctx.warnings.append(f"{fe['path']}: nội thất {fe['id']!r} nằm trong vùng quét của cánh cửa đi {de['id']!r} (cánh + cung mở 90°): cửa không mở hết được; dịch nội thất hoặc đổi chiều mở (cảnh báo mềm, bản vẽ vẫn dựng).")
     for view in views:
         legs_ops = {}
         for e in view["elems"]:

@@ -52,7 +52,7 @@
      "lop": "NET-CHINH"
     },
     {
-     "loai": "dam",
+     "loai": "mat_tuong_dung",
      "id": "DAM1",
      "hcn": [
       0,
@@ -62,7 +62,7 @@
      ]
     },
     {
-     "loai": "cot_mc",
+     "loai": "mat_tuong_dung",
      "id": "C1",
      "hcn": [
       -110,
@@ -72,7 +72,7 @@
      ]
     },
     {
-     "loai": "cot_mc",
+     "loai": "mat_tuong_dung",
      "id": "C2",
      "hcn": [
       4390,
@@ -82,7 +82,7 @@
      ]
     },
     {
-     "loai": "cot_mc",
+     "loai": "mat_tuong_dung",
      "id": "C3",
      "hcn": [
       8890,
@@ -196,21 +196,11 @@
      ],
      "diem": [
       4500,
-      5000
+      4650
      ],
      "vi_tri": [
       5500,
       5800
-     ]
-    },
-    {
-     "loai": "ghi_chu",
-     "chu": [
-      "MẶT ĐỨNG TRỤC 1-2"
-     ],
-     "vi_tri": [
-      0,
-      -2400
      ]
     }
    ],

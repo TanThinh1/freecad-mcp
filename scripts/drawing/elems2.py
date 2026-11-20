@@ -68,6 +68,15 @@ def v_lop(e, path, ctx, view):
     return None
 
 
+def v_mat_tuong(e, path, ctx, view):
+    b = _box(e, "hcn", path, ctx)
+    m = e.get("vat_lieu_hatch")
+    if m is not None and m not in MATERIALS:
+        ctx.err(path, f"vat_lieu_hatch = {m!r} không hợp lệ; bỏ trống (không hatch) hoặc dùng một trong: {', '.join(repr(k) for k in MATERIALS)}.")
+        return None
+    return dict(box=b, vat_lieu=m) if b else None
+
+
 def v_kc(e, path, ctx, view):
     b = _box(e, "hcn", path, ctx)
     m = _mat(e, path, ctx)
@@ -226,6 +235,7 @@ def v_gio(e, path, ctx, view):
 
 NEW = {
     "lop_vat_lieu": (v_lop, True, {"goc", "huong", "dai", "lop", "tong_day"}),
+    "mat_tuong_dung": (v_mat_tuong, True, {"hcn", "vat_lieu_hatch"}),
     "san": (v_kc, True, {"hcn", "vat_lieu"}), "dam": (v_kc, True, {"hcn", "vat_lieu"}), "cot_mc": (v_kc, True, {"hcn", "vat_lieu"}),
     "mong_don": (v_mong, True, {"goc", "dai_lot", "day_lot", "dai_mong", "day_mong", "dai_co", "cao_co"}),
     "cot_chi_tiet": (v_cot_ct, True, {"hcn", "bao_ve", "d", "n_tren", "n_duoi"}),
@@ -238,7 +248,7 @@ NEW = {
     "dau_cat": (v_dau_cat, True, {"ten", "tu", "den", "nhin"}),
     "tuyen_gio": (v_gio, True, {"ten", "x", "tu_y", "den_y"}),
 }
-RECT_MATERIAL = ("san", "dam", "cot_mc")
+RECT_MATERIAL = ("san", "dam", "cot_mc", "mat_tuong_dung")
 
 
 # ------------------------------------------------------------------ geometry
@@ -269,7 +279,7 @@ def level_text(val: Fraction) -> str:
 def rect_with_hatch(W, X, s, tag, hatch_tag, box, material, layer="NET-CHINH"):
     x0, y0, x1, y1 = box
     W.add(Rect(layer=layer, tag=tag, p0=(float(x0) / s, float(y0) / s), p1=(float(x1) / s, float(y1) / s)))
-    for m, (ang, sp) in enumerate(MATERIALS[material]):
+    for m, (ang, sp) in enumerate(MATERIALS[material] if material else []):
         for k, (p, q) in enumerate(hatch_segments(box, ang, sp, s)):
             W.line("MAT-CAT", f"{hatch_tag}:{m}", (p[0] / s, p[1] / s), (q[0] / s, q[1] / s))
 
@@ -347,6 +357,39 @@ def geom(sp, view, W, X):
             W.line("NET-MANH", f"leader:{eid if eid else e['idx']}:tick", (c[0] - asz, c[1] - asz), (c[0] + asz, c[1] + asz))
 
 
+def _cross_point(p, q, a, b):
+    """Intersection point of segments pq and ab (proper crossing or touching), None when they do not meet (collinear overlaps are ignored)."""
+    r, s_ = (q[0] - p[0], q[1] - p[1]), (b[0] - a[0], b[1] - a[1])
+    den = r[0] * s_[1] - r[1] * s_[0]
+    if abs(den) < 1e-12:
+        return None
+    t = ((a[0] - p[0]) * s_[1] - (a[1] - p[1]) * s_[0]) / den
+    u = ((a[0] - p[0]) * r[1] - (a[1] - p[1]) * r[0]) / den
+    return (p[0] + t * r[0], p[1] + t * r[1]) if -1e-9 <= t <= 1 + 1e-9 and -1e-9 <= u <= 1 + 1e-9 else None
+
+
+def check_leader(W, key, d, v, who):
+    """The leader d -> v must not cross any line / rectangle edge / circle except hatch and its own parts; touching the line it points at (within 0.3 mm of d) is allowed."""
+    from build_e import Unplaceable
+    for p in W.prims:
+        if p.tag.startswith(("hatch:", f"leader:{key}")):
+            continue
+        segs = []
+        if isinstance(p, Line):
+            segs = [(p.p1, p.p2)]
+        elif isinstance(p, Rect):
+            x0, y0, x1, y1 = p.p0[0], p.p0[1], p.p1[0], p.p1[1]
+            segs = [((x0, y0), (x1, y0)), ((x1, y0), (x1, y1)), ((x1, y1), (x0, y1)), ((x0, y1), (x0, y0))]
+        for a, b in segs:
+            c = _cross_point(d, v, a, b)
+            if c is not None and math.hypot(c[0] - d[0], c[1] - d[1]) > 0.3:
+                raise Unplaceable(f"{who}: đường dẫn cắt nét {p.tag!r}. Đặt diem trên nét cần chỉ tới (đầu mũi tên nằm TRÊN nét là hợp lệ) hoặc đổi vi_tri để đường dẫn không đi xuyên nét khác")
+        if isinstance(p, Circle):
+            da, db = math.hypot(d[0] - p.c[0], d[1] - p.c[1]), math.hypot(v[0] - p.c[0], v[1] - p.c[1])
+            if min(da, db) < p.r < max(da, db) and da > p.r + 0.3:
+                raise Unplaceable(f"{who}: đường dẫn cắt vòng tròn {p.tag!r}")
+
+
 def labels2(sp, view, W, X):
     P = sp["params"]
     mo = view.get("mo_cao") or (Fraction(0), Fraction(0))
@@ -364,6 +407,7 @@ def labels2(sp, view, W, X):
             W.place(f"lv_text:{e['idx']}", "CHU", level_text(val), P["cao_chu_vong_truc"], [((px - 1.0 * sgn, py + 3.8), "left" if sgn > 0 else "right", 0.0)], who, exclude_tag=f"lv:{e['idx']}")
         elif t == "ghi_chu_dan":
             d, v = e["diem"], e["vi_tri"]
+            check_leader(W, e["id"] if e["id"] else e["idx"], (X(d[0]), X(d[1])), (X(v[0]), X(v[1])), who)
             right = X(v[0]) >= X(d[0])
             for k, ln in enumerate(e["dong"]):
                 pos = (X(v[0]) + (1.2 if right else -1.2), X(v[1]) - e["cao"] / 2 - k * (e["cao"] + 2.0))

@@ -90,13 +90,18 @@ PHAN_TU += [
          vi_du={"loai": "bac_thang_don_gian", "id": "BT", "tu": [0, 0], "so_bac": 10, "cao_bac": 170, "rong_bac": 270}),
     dict(loai="cao_do", nhom="ký hiệu", mo_ta="Ký hiệu cao độ (tam giác + gạch ngang + chữ). Chữ TỰ TÍNH = cao_m của mức tham chiếu + (y - y tham chiếu)/1000, 3 chữ số thập phân; mức tham chiếu khai ở hinh.mo_cao = {\"y\": mm, \"cao_m\": m} (mặc định y 0 ứng với ±0.000).",
          tham_so=[_p("vi_tri", "mũi tam giác " + PT), _p("huong", "\"phai\" | \"trai\" (gạch ngang kéo về phía nào)", False, "phai")], vi_du={"loai": "cao_do", "vi_tri": [9600, 3300], "huong": "phai"}),
-    dict(loai="ghi_chu_dan", nhom="ký hiệu", mo_ta="Ghi chú có đường dẫn: mũi tên 45° tại diem, đường dẫn tới vi_tri, chữ nằm bên phải (hoặc bên trái nếu vi_tri ở bên trái diem). Chữ không được chạm nét khác.", tham_so=[_p("chu", "chuỗi hoặc danh sách dòng"), _p("diem", "điểm chỉ tới " + PT), _p("vi_tri", "đầu kia của đường dẫn " + PT), _p("cao", "2.5 | 3.5 | 5", False, 2.5), _p("dam", "đậm", False, False)],
+    dict(loai="ghi_chu_dan", nhom="ký hiệu", mo_ta="Ghi chú có đường dẫn: mũi tên 45° tại diem, đường dẫn tới vi_tri, chữ nằm bên phải (hoặc bên trái nếu vi_tri ở bên trái diem). Chữ không được chạm nét khác. Đường dẫn KHÔNG được cắt qua nét khác (chỉ được kết thúc ngay trên nét cần chỉ tới): đặt diem trên nét, không đặt trong lòng một hình rồi kéo ra ngoài.", tham_so=[_p("chu", "chuỗi hoặc danh sách dòng"), _p("diem", "điểm chỉ tới " + PT), _p("vi_tri", "đầu kia của đường dẫn " + PT), _p("cao", "2.5 | 3.5 | 5", False, 2.5), _p("dam", "đậm", False, False)],
          vi_du={"loai": "ghi_chu_dan", "chu": ["BÊ TÔNG LÓT"], "diem": [1500, -200], "vi_tri": [2200, -900]}),
     dict(loai="dau_cat", nhom="ký hiệu", mo_ta="Dấu cắt mặt cắt: đường đậm từ tu tới den (ngang hoặc đứng) và hai cánh dài 8 mm giấy về phía nhìn, chữ ten ở đầu mỗi cánh.", tham_so=[_p("id", "chuỗi duy nhất"), _p("ten", "1-3 ký tự"), _p("tu", PT), _p("den", PT), _p("nhin", "tren | duoi (đường ngang); trai | phai (đường đứng)")],
          vi_du={"loai": "dau_cat", "id": "DC1", "ten": "1", "tu": [0, 1500], "den": [4000, 1500], "nhin": "tren"}),
     dict(loai="tuyen_gio", nhom="ký hiệu", mo_ta="Tuyến gió (trục) trên mặt đứng: đường chấm gạch thẳng đứng từ tu_y tới den_y và vòng ký hiệu ở đầu trên.", tham_so=[_p("id", "chuỗi duy nhất"), _p("ten", "1-3 ký tự"), _p("x", "mm"), _p("tu_y", "mm"), _p("den_y", "mm, lớn hơn tu_y")],
          vi_du={"loai": "tuyen_gio", "id": "G1", "ten": "1", "x": 0, "tu_y": -450, "den_y": 5000}),
 ]
+
+PHAN_TU.insert([p["loai"] for p in PHAN_TU].index("san"), dict(
+    loai="mat_tuong_dung", nhom="mặt đứng", mo_ta="Mặt tường / dầm / cột nhìn từ ngoài (mặt đứng): hình chữ nhật KHÔNG hatch (mặt đứng không hatch vật liệu); tuỳ chọn vat_lieu_hatch nếu cần hatch.",
+    tham_so=[_p("id", "chuỗi duy nhất"), _p("hcn", "[x0, y0, x1, y1] mm, x1 > x0, y1 > y0"), _p("vat_lieu_hatch", "be_tong | gach | vua | dat | thep; bỏ trống = không hatch", False)],
+    vi_du={"loai": "mat_tuong_dung", "id": "MT1", "hcn": [0, 0, 9000, 2950]}))
 
 LAYERS = {"tuong": "NET-CHINH (nét đậm)", "cửa đi / cửa sổ / nội thất / mũi tên bắc / phần tử thô mặc định": "NET-MANH (nét mảnh)", "trục": "TRUC (nét chấm gạch) + TRUC-KYHIEU (vòng, chữ)", "kích thước": "KICH-THUOC",
           "chữ (nhãn phòng, ghi chú, tên hình, nhãn nội thất)": "CHU", "hatch vật liệu": "MAT-CAT", "cửa đứng nét khuất (chiều mở)": "NET-KHUAT", "phần tử thô": "NET-CHINH | NET-MANH | NET-KHUAT (nét đứt) | NET-TAM (nét chấm gạch) theo tham số lop"}

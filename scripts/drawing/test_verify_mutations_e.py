@@ -93,6 +93,26 @@ def x_variant(raw):
            dict(loai="cot_mc", id="CM", hcn=[10800, 0, 11020, 3000]), dict(loai="mong_don", id="MG", goc=[11300, -1200], dai_lot=1000, day_lot=100, dai_mong=800, day_mong=200, dai_co=300, cao_co=900)]
 
 
+def e2c_variant(raw):                      # a bed inside the swing of door D3
+    for e in raw["hinh"][0]["phan_tu"]:
+        if e.get("id") == "G1":
+            e["vi_tri"] = [800, 4500]
+        if e.get("id") == "T1":
+            e["vi_tri"] = [2700, 6200]
+        if e.get("id") == "P3":
+            e["vi_tri_nhan"] = [3395, 5300]
+
+
+def e4h_variant(raw):                      # a facade rectangle WITH a requested hatch
+    for e in raw["hinh"][0]["phan_tu"]:
+        if e.get("id") == "DAM1":
+            e["vat_lieu_hatch"] = "gach"
+
+
+def e7c_variant(raw):                      # footing detail + a column section (cot_chi_tiet)
+    raw["hinh"][0]["phan_tu"].append(dict(loai="cot_chi_tiet", id="CT", hcn=[3200, -400, 3500, 0], bao_ve=25, d=16, n_tren=2, n_duoi=2))
+
+
 def warn2_variant(raw):
     raw["hinh"][0]["phan_tu"] += [dict(loai="lan_can", id="LC", tu=[7200, 0], dai=1500, cao=800, buoc=500), dict(loai="bac_thang_don_gian", id="BT", tu=[9600, 0], so_bac=4, cao_bac=200, rong_bac=250)]
 
@@ -101,7 +121,8 @@ def main():
     profile = read_profile()
     S = {"e1": load("e1_phong_don_gian", profile), "e2": load("e2_nha_cap4", profile), "e1r": load("e1_phong_don_gian", profile, raw_variant), "e1w": load("e1_phong_don_gian", profile, warn_variant),
          "e4": load("e4_mat_dung_nha_cap4", profile), "e5": load("e5_mat_cat_1_1", profile), "e5x": load("e5_mat_cat_1_1", profile, x_variant), "e7": load("e7_chi_tiet_mong", profile),
-         "e5w": load("e5_mat_cat_1_1", profile, warn2_variant)}
+         "e5w": load("e5_mat_cat_1_1", profile, warn2_variant),
+         "e6": load("e6_chi_tiet_cua", profile), "e2c": load("e2_nha_cap4", profile, e2c_variant), "e4h": load("e4_mat_dung_nha_cap4", profile, e4h_variant), "e7c": load("e7_chi_tiet_mong", profile, e7c_variant)}
     work = os.path.join(OUT, "_mutations_e")
     shutil.rmtree(work, ignore_errors=True)
     os.makedirs(work)
@@ -142,6 +163,33 @@ def main():
     L = lambda D, pre: tagged(D, pre, Line)
     T = lambda D, pre: tagged(D, pre, Text)
     H = lambda D, k=0: L(D, "hatch:")[k]
+    def shift_all(D, dx, dy):
+        for p in D.prims:
+            if p.sheet:
+                continue
+            for k in ("p1", "p2", "p0", "c", "pos"):
+                if hasattr(p, k):
+                    q = getattr(p, k)
+                    setattr(p, k, (q[0] + dx, q[1] + dy))
+        D.origin = (D.origin[0] + dx, D.origin[1] + dy)
+    # ---- group 1 (20/11): centring 1.70, leaders 1.71, bubbles 1.72, door swing vs furniture 1.61, facade rectangles without hatch
+    add("drawing_shifted_6mm_to_the_right_not_centred", "e2", lambda D: shift_all(D, 6.0, 0.0), {"1.70"})
+    add("drawing_shifted_8mm_up_not_centred", "e1", lambda D: shift_all(D, 0.0, 8.0), {"1.70"})
+    add("drawing_shifted_3mm_diagonal_not_centred", "e5", lambda D: shift_all(D, -3.0, 3.0), {"1.70"})
+    add("leader_end_dragged_through_the_wall_layers", "e5", lambda D: setattr(L(D, "leader:")[0], "p2", (D.origin[0] - 100.0 / D.scale * 1.0, L(D, "leader:")[0].p2[1])), {"1.71"})
+    add("leader_starts_inside_the_door_and_crosses_the_frame", "e6", lambda D: setattr(L(D, "leader:")[0], "p1", (D.origin[0] + 450.0 / D.scale, L(D, "leader:")[0].p1[1])), {"1.71"})
+    add("leader_dragged_down_across_the_roof_and_beam", "e4", lambda D: setattr(L(D, "leader:")[0], "p2", (L(D, "leader:")[0].p1[0], D.origin[1] + 2000.0 / D.scale)), {"1.71"})
+    add("grid_bubble_dragged_onto_its_axis_line", "e1", lambda D: shift(D, tagged(D, "bubble", Circle)[0], 0.0, -4.0 * D.scale), {"1.72"})
+    add("text_beside_a_grid_bubble_touching_it", "e1", lambda D: D.prims.append(Text(layer="CHU", tag="note:9:0", s="X", pos=(tagged(D, "bubble", Circle)[1].c[0] + tagged(D, "bubble", Circle)[1].r + 0.1, tagged(D, "bubble", Circle)[1].c[1] - 1.0), h=2.5)), {"1.72", "1.55"})
+    add("wind_bubble_dragged_down_onto_its_axis", "e4", lambda D: shift(D, tagged(D, "gio_bubble:G2", Circle)[0], 0.0, -4.0 * D.scale), {"1.72"})
+    add("two_bubbles_overlapping", "e2", lambda D: shift(D, tagged(D, "bubble", Circle)[0], 3.0 * D.scale, 0.0), {"1.72", "1.50"})
+    add("swing_warning_missing_for_a_bed_in_the_door_swing", "e2c", lambda D: D.info.__setitem__("warnings", []), {"1.61"})
+    add("swing_warning_naming_the_wrong_door", "e2c", lambda D: D.info.__setitem__("warnings", [w.replace("'D3'", "'D4'") for w in D.info["warnings"]]), {"1.61"})
+    add("swing_warning_spurious_when_the_bed_is_clear", "e2", lambda D: D.info.__setitem__("warnings", ["noi that 'G1' nằm trong vùng quét của cánh cửa đi 'D3' (cánh + cung mở 90°)"]), {"1.61"})
+    add("facade_hatch_appears_without_a_request", "e4", lambda D: D.prims.append(Line(layer="MAT-CAT", tag="hatch:DAM1:0:0", p1=tagged(D, "kc:DAM1", Rect)[0].p0, p2=(tagged(D, "kc:DAM1", Rect)[0].p0[0] + 1.0, tagged(D, "kc:DAM1", Rect)[0].p0[1] + 1.0))), {"1.63", "1.68"}, {"2.36"})
+    add("facade_hatch_requested_but_missing_line", "e4h", lambda D: D.prims.remove(L(D, "hatch:DAM1")[2]), {"1.63"}, {"2.36"})
+    add("facade_rectangle_moved_1mm", "e4", lambda D: shift(D, tagged(D, "kc:DAM1", Rect)[0], 0.0, 1.0), {"1.64"}, {"2.30"})
+    add("facade_rectangle_deleted", "e4", lambda D: D.prims.remove(tagged(D, "kc:C2", Rect)[0]), {"1.64"}, {"2.30"})
     # ---- phase 2: 1.63 hatch
     add("hatch_line_deleted", "e5", lambda D: D.prims.remove(H(D, 3)), {"1.63"}, {"2.36"})
     add("hatch_line_moved_0.5mm_near_miss", "e5", lambda D: shift(D, H(D, 5), 0.5, 0.0), {"1.63"}, {"2.36"})
@@ -154,9 +202,9 @@ def main():
     add("layer_rectangle_thinner_1mm", "e5", lambda D: setattr(tagged(D, "lop:TUONG:1", Rect)[0], "p1", (tagged(D, "lop:TUONG:1", Rect)[0].p1[0] - 1.0 / D.scale, tagged(D, "lop:TUONG:1", Rect)[0].p1[1])), {"1.64", "1.67"}, {"2.30"})
     add("slab_rectangle_deleted", "e5", lambda D: D.prims.remove(tagged(D, "kc:SAN", Rect)[0]), {"1.64"}, {"2.30"})
     add("foundation_block_moved_1mm", "e7", lambda D: shift(D, tagged(D, "mong:M1:mong", Rect)[0], 1.0, 0.0), {"1.64"}, {"2.30"})
-    add("rebar_circle_moved_1mm", "e7", lambda D: shift(D, tagged(D, "cot:CT:thep", Circle)[1], 1.0, 0.0), {"1.64"}, {"2.31"})
-    add("stirrup_rectangle_resized", "e7", lambda D: setattr(tagged(D, "cot:CT:dai", Rect)[0], "p1", (tagged(D, "cot:CT:dai", Rect)[0].p1[0] + 1.0 / D.scale, tagged(D, "cot:CT:dai", Rect)[0].p1[1])), {"1.64"}, {"2.31"})
-    add("rebar_circle_deleted", "e7", lambda D: D.prims.remove(tagged(D, "cot:CT:thep", Circle)[0]), {"1.64"}, {"2.31"})
+    add("rebar_circle_moved_1mm", "e7c", lambda D: shift(D, tagged(D, "cot:CT:thep", Circle)[1], 1.0, 0.0), {"1.64"}, {"2.31"})
+    add("stirrup_rectangle_resized", "e7c", lambda D: setattr(tagged(D, "cot:CT:dai", Rect)[0], "p1", (tagged(D, "cot:CT:dai", Rect)[0].p1[0] + 1.0 / D.scale, tagged(D, "cot:CT:dai", Rect)[0].p1[1])), {"1.64"}, {"2.31"})
+    add("rebar_circle_deleted", "e7c", lambda D: D.prims.remove(tagged(D, "cot:CT:thep", Circle)[0]), {"1.64"}, {"2.31"})
     # ---- 1.65 elevation / section items
     add("roof_line_moved_1mm", "e4", lambda D: shift(D, L(D, "mai:M1:top")[0], 0.0, 1.0), {"1.65"}, {"2.30"})
     add("roof_end_line_deleted", "e5", lambda D: D.prims.remove(L(D, "mai:MAI:dau")[0]), {"1.65"}, {"2.30"})
@@ -299,6 +347,7 @@ def main():
     need({"1.54", "1.55"}, prim_check(D2, sp_edit(sp2, lambda s: elems(s, "kich_thuoc")[0].update(tham_chieu=["truc:1", "S1:dau", "S1:cuoi", "D1:dau", "D1:cuoi", "truc:2"]))), "spec_dimension_reference_changed")
     need({"1.60"}, prim_check(D1, sp_edit(sp1, lambda s: s.update(scale=100))), "spec_scale_1:100_vs_drawing_1:50")
     sp5, D5 = S["e5"]
+    need({"1.63"}, prim_check(S["e4"][1], sp_edit(S["e4"][0], lambda s: elems(s, "mat_tuong_dung")[0].update(vat_lieu="gach"))), "spec_facade_hatch_requested_but_drawing_has_none")
     need({"1.67", "1.64", "1.63"}, prim_check(D5, sp_edit(sp5, lambda s: s["views"][0]["elems"][0]["layers"].__setitem__(0, ("dat", Fraction(160))))), "spec_layer_150_vs_160_in_the_drawing")
     need({"1.67"}, prim_check(D5, sp_edit(sp5, lambda s: elems(s, "lop_vat_lieu")[1].update(tong_day=Fraction(240)))), "spec_total_thickness_240_vs_layers_230")
     need({"1.69"}, prim_check(D5, sp_edit(sp5, lambda s: s["views"][0].update(mo_cao=(Fraction(0), Fraction(1))))), "spec_reference_level_1.000_vs_drawn_texts")

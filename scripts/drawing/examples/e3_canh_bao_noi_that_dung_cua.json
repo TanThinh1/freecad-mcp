@@ -1,0 +1,459 @@
+{
+ "loai": "E",
+ "ten": "e3_canh_bao_noi_that_dung_cua",
+ "ty_le": "auto",
+ "khung_ten": {
+  "don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP",
+  "cong_trinh": "NHÀ Ở GIA ĐÌNH CẤP 4",
+  "chu_dau_tu": "ÔNG NGUYỄN VĂN A",
+  "loai_ho_so": "BVTC",
+  "ngay": "22/11/2026",
+  "ten_ban_ve": "CẢNH BÁO: GIƯỜNG TRONG VÙNG QUÉT CỦA CỬA D3"
+ },
+ "hinh": [
+  {
+   "id": "MB1",
+   "ten": "MẶT BẰNG TẦNG TRỆT",
+   "phan_tu": [
+    {
+     "loai": "truc",
+     "truc_dung": [
+      {
+       "ten": "1",
+       "x": 0
+      },
+      {
+       "ten": "2",
+       "x": 4500
+      },
+      {
+       "ten": "3",
+       "x": 9000
+      }
+     ],
+     "truc_ngang": [
+      {
+       "ten": "A",
+       "y": 0
+      },
+      {
+       "ten": "B",
+       "y": 3000
+      },
+      {
+       "ten": "C",
+       "y": 4200
+      },
+      {
+       "ten": "D",
+       "y": 7000
+      }
+     ]
+    },
+    {
+     "loai": "tuong",
+     "id": "W1",
+     "diem": [
+      [
+       0,
+       0
+      ],
+      [
+       9000,
+       0
+      ],
+      [
+       9000,
+       7000
+      ],
+      [
+       0,
+       7000
+      ]
+     ],
+     "kin": true,
+     "day": 220
+    },
+    {
+     "loai": "tuong",
+     "id": "W2",
+     "diem": [
+      [
+       0,
+       3000
+      ],
+      [
+       9000,
+       3000
+      ]
+     ],
+     "day": 220
+    },
+    {
+     "loai": "tuong",
+     "id": "W3",
+     "diem": [
+      [
+       0,
+       4200
+      ],
+      [
+       9000,
+       4200
+      ]
+     ],
+     "day": 220
+    },
+    {
+     "loai": "tuong",
+     "id": "W4",
+     "diem": [
+      [
+       4500,
+       4200
+      ],
+      [
+       4500,
+       7000
+      ]
+     ],
+     "day": 220
+    },
+    {
+     "loai": "cua_di",
+     "id": "D1",
+     "tuong": "W1",
+     "doan": 0,
+     "vi_tri": 5200,
+     "rong": 1000,
+     "ban_le": "dau",
+     "mo_ve": "trai"
+    },
+    {
+     "loai": "cua_di",
+     "id": "D2",
+     "tuong": "W2",
+     "doan": 0,
+     "vi_tri": 4000,
+     "rong": 900,
+     "ban_le": "cuoi",
+     "mo_ve": "phai"
+    },
+    {
+     "loai": "cua_di",
+     "id": "D3",
+     "tuong": "W3",
+     "doan": 0,
+     "vi_tri": 1000,
+     "rong": 900,
+     "ban_le": "dau",
+     "mo_ve": "trai"
+    },
+    {
+     "loai": "cua_di",
+     "id": "D4",
+     "tuong": "W3",
+     "doan": 0,
+     "vi_tri": 5500,
+     "rong": 900,
+     "ban_le": "dau",
+     "mo_ve": "trai"
+    },
+    {
+     "loai": "cua_so",
+     "id": "S1",
+     "tuong": "W1",
+     "doan": 0,
+     "vi_tri": 1000,
+     "rong": 1800,
+     "ky_hieu": "kep"
+    },
+    {
+     "loai": "cua_so",
+     "id": "S2",
+     "tuong": "W1",
+     "doan": 2,
+     "vi_tri": 5500,
+     "rong": 1500,
+     "ky_hieu": "ba"
+    },
+    {
+     "loai": "cua_so",
+     "id": "S3",
+     "tuong": "W1",
+     "doan": 2,
+     "vi_tri": 2000,
+     "rong": 1500,
+     "ky_hieu": "ba"
+    },
+    {
+     "loai": "phong",
+     "id": "P1",
+     "ten": "PHÒNG KHÁCH",
+     "da_giac": [
+      [
+       110,
+       110
+      ],
+      [
+       8890,
+       110
+      ],
+      [
+       8890,
+       2890
+      ],
+      [
+       110,
+       2890
+      ]
+     ]
+    },
+    {
+     "loai": "phong",
+     "id": "P2",
+     "ten": "HÀNH LANG",
+     "da_giac": [
+      [
+       110,
+       3110
+      ],
+      [
+       8890,
+       3110
+      ],
+      [
+       8890,
+       4090
+      ],
+      [
+       110,
+       4090
+      ]
+     ]
+    },
+    {
+     "loai": "phong",
+     "id": "P3",
+     "ten": "PHÒNG NGỦ 1",
+     "da_giac": [
+      [
+       110,
+       4310
+      ],
+      [
+       4390,
+       4310
+      ],
+      [
+       4390,
+       6890
+      ],
+      [
+       110,
+       6890
+      ]
+     ],
+     "vi_tri_nhan": [
+      3395,
+      5300
+     ]
+    },
+    {
+     "loai": "phong",
+     "id": "P4",
+     "ten": "PHÒNG NGỦ 2",
+     "da_giac": [
+      [
+       4610,
+       4310
+      ],
+      [
+       8890,
+       4310
+      ],
+      [
+       8890,
+       6890
+      ],
+      [
+       4610,
+       6890
+      ]
+     ],
+     "vi_tri_nhan": [
+      5600,
+      6100
+     ]
+    },
+    {
+     "loai": "noi_that_co_ban",
+     "id": "G1",
+     "kieu": "giuong",
+     "vi_tri": [
+      800,
+      4500
+     ]
+    },
+    {
+     "loai": "noi_that_co_ban",
+     "id": "T1",
+     "kieu": "tu",
+     "vi_tri": [
+      2700,
+      6200
+     ]
+    },
+    {
+     "loai": "noi_that_co_ban",
+     "id": "G2",
+     "kieu": "giuong",
+     "vi_tri": [
+      6600,
+      4500
+     ]
+    },
+    {
+     "loai": "noi_that_co_ban",
+     "id": "T2",
+     "kieu": "tu",
+     "vi_tri": [
+      8250,
+      5500
+     ],
+     "xoay": 90
+    },
+    {
+     "loai": "noi_that_co_ban",
+     "id": "B1",
+     "kieu": "ban",
+     "vi_tri": [
+      3000,
+      1200
+     ]
+    },
+    {
+     "loai": "noi_that_co_ban",
+     "id": "GH1",
+     "kieu": "ghe",
+     "vi_tri": [
+      2400,
+      1350
+     ]
+    },
+    {
+     "loai": "noi_that_co_ban",
+     "id": "GH2",
+     "kieu": "ghe",
+     "vi_tri": [
+      4350,
+      1350
+     ]
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K1",
+     "kieu": "chuoi",
+     "huong": "ngang",
+     "tham_chieu": [
+      "truc:1",
+      "S1:dau",
+      "S1:cuoi",
+      "D1:dau",
+      "D1:cuoi",
+      "truc:3"
+     ],
+     "phia": "duoi",
+     "lop": 1
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K2",
+     "kieu": "chuoi",
+     "huong": "ngang",
+     "tham_chieu": [
+      "truc:1",
+      "truc:2",
+      "truc:3"
+     ],
+     "phia": "duoi",
+     "lop": 2
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K3",
+     "kieu": "ngang",
+     "tham_chieu": [
+      "truc:1",
+      "truc:3"
+     ],
+     "phia": "duoi",
+     "lop": 3
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K4",
+     "kieu": "chuoi",
+     "huong": "ngang",
+     "tham_chieu": [
+      "truc:1",
+      "S2:cuoi",
+      "S2:dau",
+      "truc:2",
+      "S3:cuoi",
+      "S3:dau",
+      "truc:3"
+     ],
+     "phia": "tren",
+     "lop": 1
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K5",
+     "kieu": "chuoi",
+     "huong": "doc",
+     "tham_chieu": [
+      "truc:A",
+      "truc:B",
+      "truc:C",
+      "truc:D"
+     ],
+     "phia": "phai",
+     "lop": 1
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K6",
+     "kieu": "doc",
+     "tham_chieu": [
+      "truc:A",
+      "truc:D"
+     ],
+     "phia": "phai",
+     "lop": 2
+    },
+    {
+     "loai": "mui_ten_bac",
+     "vi_tri": [
+      12500,
+      6000
+     ],
+     "goc": 0
+    },
+    {
+     "loai": "ghi_chu",
+     "chu": [
+      "GHI CHÚ:",
+      "- TƯỜNG GẠCH DÀY 220 MM, TRÁT VỮA HAI MẶT.",
+      "- CỬA ĐI RỘNG 900-1000 MM."
+     ],
+     "vi_tri": [
+      0,
+      -3600
+     ],
+     "can": "trai"
+    }
+   ]
+  }
+ ]
+}

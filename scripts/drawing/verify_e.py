@@ -567,9 +567,118 @@ def check_primitives_e(C: Checks, D, sp):
             w_exp.append(e["id"])
     got_w = D.info.get("warnings", [])
     w_exp += verify_e2.soft_warning_ids(view)
-    ok_w = len(got_w) == len(w_exp) and all(any(f"{i!r}" in w or f"id={i!r}" in w for w in got_w) for i in w_exp) and all("KHÔNG phải điều khoản TCVN" in w for w in got_w)
-    C.add(1, "1.61", "cảnh báo mềm (cửa đi hẹp hơn 700 mm, tường dày ngoài 100-500 mm: kinh nghiệm thực tế, không phải điều khoản TCVN): đúng phần tử, không thừa không thiếu", ok_w, f"cần {w_exp}; có {len(got_w)} cảnh báo")
+    pairs = [(f["id"], d["id"]) for f in view["elems"] if f["t"] == "noi_that_co_ban" for d in view["elems"] if d["t"] == "cua_di" and sweep_hit(view, d, furn_box(f))]
+    soft = [w for w in got_w if "vùng quét của cánh cửa" in w]
+    ok_pairs = len(soft) == len(pairs) and all(any(f"{a!r}" in w and f"{b!r}" in w for w in soft) for a, b in pairs)
+    got_w = [w for w in got_w if "vùng quét của cánh cửa" not in w]
+    ok_w = ok_pairs and len(got_w) == len(w_exp) and all(any(f"{i!r}" in w or f"id={i!r}" in w for w in got_w) for i in w_exp) and all("KHÔNG phải điều khoản TCVN" in w for w in got_w)
+    C.add(1, "1.61", "cảnh báo mềm (cửa đi hẹp hơn 700 mm, tường dày ngoài 100-500 mm, lan can/bậc thang ngoài khoảng thường dùng: kinh nghiệm thực tế, không phải điều khoản TCVN; nội thất nằm trong vùng quét của cánh cửa đi): đúng phần tử, không thừa không thiếu", ok_w,
+          f"cần {w_exp}; nội thất-cửa {pairs}; có {len(got_w)} cảnh báo + {len(soft)} cảnh báo vùng quét")
+    check_centering(C, D)
+    check_leaders(C, D)
+    check_bubbles(C, D)
     check_expressions(C, [t.s for t in drawn], 1, "1.62", "chữ trên bản vẽ")
+
+
+def sweep_hit(view, door, box):
+    """Own test (global axes): does the rectangle meet the quarter disc swept by the door leaf? The disc lies in the quadrant spanned by the closed direction and the swing normal."""
+    w = next(x for x in view["elems"] if x.get("id") == door["tuong"])
+    a, d, n, length, lo, hi, _, _ = legs_of(w)[door["doan"]]
+    v, r = door["vi_tri"], door["rong"]
+    t = v if door["ban_le"] == "dau" else v + r
+    off = hi if door["mo_ve"] == "trai" else lo
+    hx, hy = a[0] + d[0] * t + n[0] * off, a[1] + d[1] * t + n[1] * off
+    sgn = 1 if door["mo_ve"] == "trai" else -1
+    closed = d if door["ban_le"] == "dau" else (-d[0], -d[1])
+    sx, sy = closed[0] + sgn * n[0], closed[1] + sgn * n[1]
+    x0, x1 = (max(box[0], hx), box[2]) if sx > 0 else (box[0], min(box[2], hx))
+    y0, y1 = (max(box[1], hy), box[3]) if sy > 0 else (box[1], min(box[3], hy))
+    if x0 >= x1 or y0 >= y1:
+        return False
+    px, py = min(max(hx, x0), x1), min(max(hy, y0), y1)
+    return (px - hx) ** 2 + (py - hy) ** 2 < r * r
+
+
+def check_centering(C, D):
+    """1.70: the drawing (all non-sheet primitives, text boxes estimated) is centred in the band it fits: the band above the title block, else the band left of it."""
+    sh = SHEETS[D.sheet]
+    bbs = [prim_bbox(p) for p in D.prims if not p.sheet]
+    x0, y0, x1, y1 = min(b[0] for b in bbs), min(b[1] for b in bbs), max(b[2] for b in bbs), max(b[3] for b in bbs)
+    w, h = x1 - x0 + 2 * MARGIN, y1 - y0 + 2 * MARGIN
+    if w <= sh.frame_w and h <= sh.frame_h - sh.tb_h:
+        reg = (sh.x0, sh.tb_y1, sh.x1, sh.y1)
+    elif w <= sh.frame_w - sh.tb_w and h <= sh.frame_h:
+        reg = (sh.x0, sh.y0, sh.tb_x0, sh.y1)
+    else:
+        reg = None
+    dx = dy = None
+    if reg:
+        dx, dy = (x0 + x1) / 2 - (reg[0] + reg[2]) / 2, (y0 + y1) / 2 - (reg[1] + reg[3]) / 2
+    C.add(1, "1.70", "hình căn giữa trong vùng vẽ (dải trên khung tên, hoặc dải trái khung tên khi không vừa dải trên), sai số ≤ 0,2 mm giấy", reg is not None and abs(dx) <= 0.2 and abs(dy) <= 0.2,
+          "không vừa dải nào" if reg is None else f"lệch tâm ({dx:.3f}, {dy:.3f}) mm; vùng {tuple(round(v, 1) for v in reg)}")
+
+
+def _inter(p, q, a, b):
+    """touching / crossing point of segments pq and ab by Cramer's rule, None when they miss (parallel ones are ignored)."""
+    r1, r2 = q[0] - p[0], q[1] - p[1]
+    s1, s2 = b[0] - a[0], b[1] - a[1]
+    den = r1 * s2 - r2 * s1
+    if abs(den) < 1e-12:
+        return None
+    t = ((a[0] - p[0]) * s2 - (a[1] - p[1]) * s1) / den
+    u = ((a[0] - p[0]) * r2 - (a[1] - p[1]) * r1) / den
+    return (p[0] + t * r1, p[1] + t * r2) if -1e-9 <= t <= 1 + 1e-9 and -1e-9 <= u <= 1 + 1e-9 else None
+
+
+def check_leaders(C, D):
+    """1.71: no leader line (ghi_chu_dan) crosses another line, rectangle edge or circle except hatch; it may end ON the line it points at (within 0.3 mm of its arrow tick centre)."""
+    leaders = [p for p in D.prims if isinstance(p, Line) and p.tag.startswith("leader:") and not p.tag.endswith(":tick")]
+    bad = []
+    for ld in leaders:
+        key = ld.tag.split(":")[1]
+        tick = next((t for t in D.prims if isinstance(t, Line) and t.tag == f"leader:{key}:tick"), None)
+        tip = ((tick.p1[0] + tick.p2[0]) / 2, (tick.p1[1] + tick.p2[1]) / 2) if tick else ld.p1
+        for p in D.prims:
+            if p.sheet or p.tag.startswith(("hatch:", f"leader:{key}")):
+                continue
+            segs = [(p.p1, p.p2)] if isinstance(p, Line) else ([((p.p0[0], p.p0[1]), (p.p1[0], p.p0[1])), ((p.p1[0], p.p0[1]), (p.p1[0], p.p1[1])), ((p.p1[0], p.p1[1]), (p.p0[0], p.p1[1])), ((p.p0[0], p.p1[1]), (p.p0[0], p.p0[1]))] if isinstance(p, Rect) else [])
+            for a, b in segs:
+                x = _inter(ld.p1, ld.p2, a, b)
+                if x is not None and math.hypot(x[0] - tip[0], x[1] - tip[1]) > 0.3:
+                    bad.append((key, p.tag))
+            if isinstance(p, Circle):
+                da, db = math.hypot(ld.p1[0] - p.c[0], ld.p1[1] - p.c[1]), math.hypot(ld.p2[0] - p.c[0], ld.p2[1] - p.c[1])
+                if min(da, db) < p.r < max(da, db):
+                    bad.append((key, p.tag))
+    C.add(1, "1.71", "đường dẫn ghi chú (ghi_chu_dan) không cắt qua nét, cạnh hình chữ nhật hay vòng tròn khác (trừ hatch); đầu mũi tên được nằm trên nét cần chỉ", not bad, f"{len(leaders)} đường dẫn; cắt: {bad[:3]}")
+
+
+def check_bubbles(C, D):
+    """1.72: no grid / wind-axis bubble touches (≤ 0.3 mm) another line, rectangle, circle or text (its own text excluded)."""
+    circles = [p for p in D.prims if isinstance(p, Circle) and p.layer == "TRUC-KYHIEU" and not p.sheet]
+    texts = text_boxes_paper([t for t in D.prims if isinstance(t, Text) and not t.sheet])
+    bad = []
+    for c in circles:
+        for p in D.prims:
+            if p is c or p.sheet:
+                continue
+            segs = [(p.p1, p.p2)] if isinstance(p, Line) else ([((p.p0[0], p.p0[1]), (p.p1[0], p.p0[1])), ((p.p1[0], p.p0[1]), (p.p1[0], p.p1[1])), ((p.p1[0], p.p1[1]), (p.p0[0], p.p1[1])), ((p.p0[0], p.p1[1]), (p.p0[0], p.p0[1]))] if isinstance(p, Rect) else [])
+            for a, b in segs:
+                dx, dy = b[0] - a[0], b[1] - a[1]
+                L2 = dx * dx + dy * dy
+                t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((c.c[0] - a[0]) * dx + (c.c[1] - a[1]) * dy) / L2))
+                if math.hypot(c.c[0] - (a[0] + t * dx), c.c[1] - (a[1] + t * dy)) < c.r + TEXT_MARGIN:
+                    bad.append((p.tag, "nét"))
+            if isinstance(p, Circle) and math.hypot(p.c[0] - c.c[0], p.c[1] - c.c[1]) < p.r + c.r + TEXT_MARGIN:
+                bad.append((p.tag, "vòng"))
+        for txt, tag, box in texts:
+            if box[0] <= c.c[0] <= box[2] and box[1] <= c.c[1] <= box[3]:
+                continue
+            cx, cy = c.c
+            dmin = math.hypot(max(box[0] - cx, 0.0, cx - box[2]), max(box[1] - cy, 0.0, cy - box[3]))
+            if dmin < c.r + TEXT_MARGIN:
+                bad.append((tag, "chữ"))
+    C.add(1, "1.72", "vòng ký hiệu trục lưới và tuyến gió không chồng hoặc chạm (≤ 0,3 mm giấy) nét, hình chữ nhật, vòng tròn hay chữ khác", not bad, f"{len(circles)} vòng; chạm: {bad[:3]}")
 
 
 ALLOWED_LAYERS = ("TRUC", "TRUC-KYHIEU", "NET-CHINH", "NET-MANH", "NET-KHUAT", "NET-TAM", "KICH-THUOC", "CHU", "KHUNG-TEN", "MAT-CAT")

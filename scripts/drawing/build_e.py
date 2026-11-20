@@ -18,7 +18,7 @@ from fractions import Fraction
 import titleblock as TBK
 from build_a import _moved
 from primitives import Circle, Drawing, Line, Rect, Text, cap_to_em, drawing_extent
-from scale import place_rects, sheet_scale_candidates
+from scale import fit_in_sheet, sheet_scale_candidates
 from spec_b import SpecError
 import elems2
 from spec_e import (ARC_STEPS_90, AUTO_SCALES, LAYER_OF, fmt2, fmt_len, leg_pieces, leg_rect, resolve, wall_legs)
@@ -117,7 +117,7 @@ class Sheetwork:
     """Primitives of one view (paper mm, model origin at (0, 0)) + placed text boxes."""
 
     def __init__(self, P, s):
-        self.P, self.s, self.prims, self.boxes = P, s, [], []
+        self.P, self.s, self.prims, self.boxes, self.box_tags = P, s, [], [], []
 
     def add(self, p):
         self.prims.append(p)
@@ -147,6 +147,7 @@ class Sheetwork:
     def text(self, tag, layer, s, h, pos, halign="left", rot=0.0, bold=False):
         t = self.add(Text(layer=layer, tag=tag, s=s, pos=(pos[0], pos[1]), h=h, rot=rot, halign=halign, bold=bold))
         self.boxes.append(text_box(s, h, pos, halign, rot, bold))
+        self.box_tags.append(tag)
         return t
 
     def place(self, tag, layer, s, h, candidates, who, exclude_tag="", bold=False, margin=None):
@@ -478,6 +479,7 @@ def layout(sp, s):
     ext = geometry_extent(W, skip=("bac_",))      # dimensions are offset from the building, not from a north arrow standing far away
     build_dims(sp, view, W, X, ext)
     build_labels(sp, view, W, X)
+    check_bubbles(W)
     ge = geometry_extent(W)
     xc = (ext[0] + ext[2]) / 2
     # ---- title + scale note below everything
@@ -490,6 +492,39 @@ def layout(sp, s):
     W.text("title", "CHU", title, cap_t, (xc, t_base), "center", 0.0, True)
     W.text("scale_note", "CHU", f"TỶ LỆ 1:{s}", cap_n, (xc, t_base - P["khoang_ghi_chu"] - cap_n * ARIAL_CAP), "center")
     return W.prims, dict(title=title, extent=ge, ext_geom=ext)
+
+
+def _seg_dist(p, a, b):
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    L2 = dx * dx + dy * dy
+    t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2))
+    return math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
+
+
+def check_bubbles(W):
+    """A bubble (grid axis, wind axis) must not touch another line, rectangle, circle or text (0.3 mm): else Unplaceable."""
+    m = 0.3
+    for c in (p for p in W.prims if isinstance(p, Circle) and (p.tag == "bubble" or p.tag.startswith("gio_bubble"))):
+        for p in W.prims:
+            if p is c:
+                continue
+            hit = None
+            if isinstance(p, Line) and _seg_dist(c.c, p.p1, p.p2) < c.r + m:
+                hit = p.tag
+            elif isinstance(p, Rect):
+                x0, y0, x1, y1 = p.p0[0], p.p0[1], p.p1[0], p.p1[1]
+                if any(_seg_dist(c.c, a, b) < c.r + m for a, b in (((x0, y0), (x1, y0)), ((x1, y0), (x1, y1)), ((x1, y1), (x0, y1)), ((x0, y1), (x0, y0)))):
+                    hit = p.tag
+            elif isinstance(p, Circle) and math.hypot(p.c[0] - c.c[0], p.c[1] - c.c[1]) < p.r + c.r + m:
+                hit = p.tag
+            if hit:
+                raise Unplaceable(f"vòng ký hiệu trục/tuyến gió tại ({(c.c[0]) * W.s:.0f}, {(c.c[1]) * W.s:.0f}) mm chạm {hit!r}: dời trục / nét đó ra xa hoặc đổi tỷ lệ")
+        for b, tg in zip(W.boxes, W.box_tags):
+            if tg in ("bubble_text",) or tg.startswith("gio_text"):
+                if b[0] <= c.c[0] <= b[2] and b[1] <= c.c[1] <= b[3]:
+                    continue
+            if box_hits_circle(b, c.c, c.r, m):
+                raise Unplaceable(f"vòng ký hiệu trục/tuyến gió tại ({(c.c[0]) * W.s:.0f}, {(c.c[1]) * W.s:.0f}) mm chạm chữ {tg!r}: dời chữ hoặc trục")
 
 
 def _extent(prims):
@@ -518,8 +553,9 @@ def build(sp: dict, profile: dict) -> Drawing:
                 tried.append(f"1:{sc}: {bad}")
             continue
         bb = _extent(prims)
-        t = place_rects([bb], gap, SHEETS[sh])
         w, hh = bb[2] - bb[0] + 2 * gap, bb[3] - bb[1] + 2 * gap
+        fit = fit_in_sheet(w, hh, SHEETS[sh])
+        t = None if fit is None else ((fit[1][0] + fit[1][2]) / 2 - (bb[0] + bb[2]) / 2, (fit[1][1] + fit[1][3]) / 2 - (bb[1] + bb[3]) / 2)     # centred in the drawing band
         if t is None:
             if sc == (want or SHEET_SCALE_LIMIT) or (not want and sc == 500):
                 tried.append(f"{sh} ở 1:{sc} cần {w:.0f}×{hh:.0f} mm (khung {SHEETS[sh].frame_w:g}×{SHEETS[sh].frame_h:g} trừ góc khung tên 180×65)")

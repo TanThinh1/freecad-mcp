@@ -81,9 +81,10 @@ def add_expected(view, s, P, sh, tx):
                 rect("kc", "NET-CHINH", r)
                 hatch(r, mat)
                 pos += d
-        elif t in ("san", "dam", "cot_mc"):
+        elif t in ("san", "dam", "cot_mc", "mat_tuong_dung"):
             rect("kc", "NET-CHINH", e["box"])
-            hatch(e["box"], e["vat_lieu"])
+            if e["vat_lieu"]:
+                hatch(e["box"], e["vat_lieu"])
         elif t == "mong_don":
             g = e["goc"]
             xc = g[0] + e["dai_lot"] / 2
@@ -214,7 +215,7 @@ def check_phase2(C, D, sp, tol=1e-6):
         if e["t"] == "lop_vat_lieu":
             for k in range(len(e["layers"])):
                 owner[f"hatch:{e['id']}:{k}"] = f"lop:{e['id']}:{k}"
-        elif e["t"] in ("san", "dam", "cot_mc"):
+        elif e["t"] in ("san", "dam", "cot_mc", "mat_tuong_dung"):
             owner[f"hatch:{e['id']}:0"] = f"kc:{e['id']}"
         elif e["t"] == "mong_don":
             for k, nm in enumerate(("lot", "mong", "co")):
