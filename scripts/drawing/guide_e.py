@@ -1,6 +1,7 @@
 """Text of huong_dan_ve("ve_tu_do"): the ONLY thing Claude Desktop knows about drawing type E. Keep it exact: every element name, parameter and rule here must match spec_e.py."""
 from __future__ import annotations
 
+import elems3
 import spec_e
 
 
@@ -98,6 +99,19 @@ PHAN_TU += [
          vi_du={"loai": "tuyen_gio", "id": "G1", "ten": "1", "x": 0, "tu_y": -450, "den_y": 5000}),
 ]
 
+PHAN_TU += [
+    dict(loai="ky_hieu", nhom="điện nước", mo_ta="Ký hiệu điện / nước lấy từ thư viện cố định (thu_vien_ky_hieu), kích thước CỐ ĐỊNH trên giấy, tâm = vi_tri (cũng là nút nối dây/ống), xoay bội số 90°.",
+         tham_so=[_p("id", "chuỗi duy nhất"), _p("kieu", "o_cam | cong_tac | den | quat | bang_dien | bon_cau | chau_rua | voi | van | dong_ho_nuoc"), _p("vi_tri", PT), _p("xoay", "0 | 90 | 180 | 270 (mặc định 0)", False)],
+         vi_du={"loai": "ky_hieu", "id": "O1", "kieu": "o_cam", "vi_tri": [3700, 2200], "xoay": 90}),
+    dict(loai="nut", nhom="điện nước", mo_ta="Nút nối (chấm tròn nhỏ) để dây/ống nối vào nơi không có thiết bị: chỗ rẽ nhánh, chỗ đi ra khỏi phòng.", tham_so=[_p("id", "chuỗi duy nhất"), _p("vi_tri", PT)],
+         vi_du={"loai": "nut", "id": "N1", "vi_tri": [500, 3100]}),
+    dict(loai="ong", nhom="điện nước", mo_ta="Đường dây điện / ống cấp / ống thoát: đường gấp khúc, điểm ĐẦU và điểm CUỐI phải trùng đúng vị trí một ky_hieu hoặc nut đã khai (không đầu mút lơ lửng; lệch là LỖI). Kiểu nét theo loại, chỉ dùng layer có sẵn.",
+         tham_so=[_p("id", "chuỗi duy nhất"), _p("loai_ong", "day_dien (NET-TAM, chấm gạch) | ong_cap (NET-CHINH, nét đậm) | ong_thoat (NET-KHUAT, nét đứt)"), _p("diem", "danh sách >= 2 điểm [x, y] mm, hai điểm liên tiếp không trùng nhau")],
+         vi_du={"loai": "ong", "id": "C1", "loai_ong": "ong_cap", "diem": [[1800, 300], [1800, 1200]]}),
+    dict(loai="chu_giai", nhom="điện nước", mo_ta="Chú giải TỰ SINH: liệt kê đúng các ký hiệu và loại đường đã dùng (thứ tự cố định: ký hiệu điện, ký hiệu nước, rồi loại đường) dưới tiêu đề CHÚ GIẢI; vi_tri = góc trên-trái, tối đa một lần mỗi hình.",
+         tham_so=[_p("vi_tri", PT)], vi_du={"loai": "chu_giai", "vi_tri": [5200, 3400]}),
+]
+
 PHAN_TU.insert([p["loai"] for p in PHAN_TU].index("san"), dict(
     loai="mat_tuong_dung", nhom="mặt đứng", mo_ta="Mặt tường / dầm / cột nhìn từ ngoài (mặt đứng): hình chữ nhật KHÔNG hatch (mặt đứng không hatch vật liệu); tuỳ chọn vat_lieu_hatch nếu cần hatch.",
     tham_so=[_p("id", "chuỗi duy nhất"), _p("hcn", "[x0, y0, x1, y1] mm, x1 > x0, y1 > y0"), _p("vat_lieu_hatch", "be_tong | gach | vua | dat | thep; bỏ trống = không hatch", False)],
@@ -109,7 +123,7 @@ LAYERS = {"tuong": "NET-CHINH (nét đậm)", "cửa đi / cửa sổ / nội th
 
 def guide() -> dict:
     return dict(
-        mo_ta="Bản vẽ tự do (loại E) cho công trình dân dụng ngoài 4 loại chuẩn: dựng từ một danh sách PHẦN TỬ có sẵn (tường, cửa, phòng, nội thất, kích thước tự đo, chữ...) rồi vẽ ra DXF + DWG + PDF + PNG với khung tên TCVN 5571:2012, khổ A3/A2/A1 và tỷ lệ tự chọn, kèm kiểm tra tự động. Giai đoạn hiện tại: MỘT hình trên một tờ (mặt bằng, mặt đứng, mặt cắt, chi tiết cấu tạo); sơ đồ điện nước và nhiều hình trên một tờ CHƯA có.",
+        mo_ta="Bản vẽ tự do (loại E) cho công trình dân dụng ngoài 4 loại chuẩn: dựng từ một danh sách PHẦN TỬ có sẵn (tường, cửa, phòng, nội thất, kích thước tự đo, chữ...) rồi vẽ ra DXF + DWG + PDF + PNG với khung tên TCVN 5571:2012, khổ A3/A2/A1 và tỷ lệ tự chọn, kèm kiểm tra tự động. Giai đoạn hiện tại: MỘT hình trên một tờ (mặt bằng, mặt đứng, mặt cắt, chi tiết cấu tạo); sơ đồ điện / cấp thoát nước một phòng (ký hiệu, dây/ống, chú giải) có ở mức tối thiểu; NHIỀU HÌNH trên một tờ CHƯA có.",
         quy_trinh=["1. Hỏi khách các số còn thiếu (kích thước phòng, bề dày tường, vị trí/bề rộng cửa...). KHÔNG tự đoán số; không có số thì HỎI.",
                    "2. Soạn spec JSON theo danh mục dưới đây; KHÔNG viết mã FreeCAD hay Python. Chỉ dùng các phần tử trong danh mục.",
                    "3. LUÔN gọi kiem_tra_spec trước. Lỗi báo đúng phần tử (chỉ số phan_tu) và tham số: sửa theo thông báo rồi gọi lại. Trình bày cho khách bảng số liệu (kích thước phòng, diện tích, số cửa, khổ giấy, tỷ lệ, cảnh báo) và CHỜ khách nói OK.",
@@ -120,10 +134,13 @@ def guide() -> dict:
                            hinh="danh sách đúng MỘT hình: {\"id\": \"MB1\", \"ten\": \"MẶT BẰNG TẦNG 1\", \"phan_tu\": [ ...phần tử... ]}", tham_so="ghi đè tham số bố cục (mm giấy), như luoi_cot (tuỳ chọn)"),
         phan_tu=PHAN_TU,
         layer=LAYERS,
-        thu_vien_ky_hieu=None,
+        thu_vien_ky_hieu=dict(
+            ky_hieu={k: dict(ten=v[0], nhom=("điện" if v[1] == "dien" else "nước")) for k, v in elems3.SYMBOLS.items()},
+            loai_duong={k: dict(ten=v[0], layer=v[1]) for k, v in elems3.PIPES.items()},
+            ghi_chu="Kích thước ký hiệu cố định trên giấy (mm giấy, nhân tỷ lệ khi quy ra mm thật); tên tiếng Việt do chú giải tự in. Hệ thống CHỈ kiểm tra HÌNH HỌC và BỐ CỤC (ký hiệu đúng hình/vị trí/chiều xoay, đường nối đúng vào thiết bị hoặc nút, chú giải đủ và đúng thứ tự). KHÔNG kiểm tra thiết kế điện / cấp thoát nước có đúng quy chuẩn hay không (tải, tiết diện dây, đường kính ống, độ dốc, khoảng cách an toàn...): người thiết kế chịu trách nhiệm."),
         gioi_han=["Tối đa 2000 phần tử mỗi spec; tối đa 1 hình mỗi tờ (giai đoạn này); spec tối đa 300000 byte.", "Mỗi dòng chữ ghi chú dưới 115 mm trên giấy.", "Tường chỉ nằm ngang hoặc đứng; đa giác phòng chỉ có cạnh ngang/đứng.",
                   "Mỗi hình phải nằm gọn vùng vẽ (khung trừ góc khung tên 180×65); nếu không vừa A1 ở tỷ lệ nào thì báo lỗi kèm kích thước cần.", "Chữ không được chạm nét tường/trục/cửa hay chữ khác: builder tự tìm vị trí nhãn, không tìm được thì báo lỗi nêu phần tử; ghi_chu/chu đặt đúng vị trí khách chọn nên có thể phải dịch vi_tri.",
-                  "Cung tròn vẽ bằng chuỗi đoạn thẳng (24 đoạn / 90°); kích thước là LINE + TEXT (không phải DIMENSION)."],
+                  "Nhiều hình trên một tờ: CHƯA có (mỗi tờ đúng một hình). Sơ đồ điện nước chỉ kiểm tra hình học và bố cục, KHÔNG kiểm tra thiết kế theo quy chuẩn điện / cấp thoát nước.", "Cung tròn vẽ bằng chuỗi đoạn thẳng (24 đoạn / 90°); kích thước là LINE + TEXT (không phải DIMENSION)."],
         canh_bao_mem=["cửa đi hẹp hơn 700 mm; tường dày ngoài 100-500 mm. Đều là kinh nghiệm thực tế, KHÔNG phải điều khoản TCVN: nêu cho khách rồi để người thiết kế xác nhận."],
         loi_thuong_gap=["cửa nằm ngoài tường: vi_tri + rong > chiều dài đoạn tường → giảm vi_tri hoặc rong, hoặc chọn đúng chỉ số doan.", "tường độ dày 0 hoặc âm; id trùng; kích thước tham chiếu tới id/mốc không tồn tại; kích thước dọc dùng mốc x (tay/dong/\"truc:1\")."],
     )

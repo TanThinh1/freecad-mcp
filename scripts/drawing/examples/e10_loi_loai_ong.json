@@ -1,0 +1,250 @@
+{
+ "loai": "E",
+ "ten": "e10_loi_loai_ong",
+ "ty_le": "1:20",
+ "khung_ten": {
+  "don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP",
+  "cong_trinh": "NHÀ Ở GIA ĐÌNH CẤP 4",
+  "chu_dau_tu": "ÔNG NGUYỄN VĂN A",
+  "loai_ho_so": "BVTC",
+  "ngay": "22/11/2026",
+  "ten_ban_ve": "LỖI: LOẠI ỐNG"
+ },
+ "hinh": [
+  {
+   "id": "H1",
+   "ten": "CẤP THOÁT NƯỚC VỆ SINH",
+   "phan_tu": [
+    {
+     "loai": "truc",
+     "truc_dung": [
+      {
+       "ten": "1",
+       "x": 0
+      },
+      {
+       "ten": "2",
+       "x": 2200
+      }
+     ],
+     "truc_ngang": [
+      {
+       "ten": "A",
+       "y": 0
+      },
+      {
+       "ten": "B",
+       "y": 2600
+      }
+     ]
+    },
+    {
+     "loai": "tuong",
+     "id": "W1",
+     "diem": [
+      [
+       0,
+       0
+      ],
+      [
+       2200,
+       0
+      ],
+      [
+       2200,
+       2600
+      ],
+      [
+       0,
+       2600
+      ]
+     ],
+     "kin": true,
+     "day": 220
+    },
+    {
+     "loai": "cua_di",
+     "id": "D1",
+     "tuong": "W1",
+     "doan": 0,
+     "vi_tri": 200,
+     "rong": 800,
+     "ban_le": "dau",
+     "mo_ve": "phai"
+    },
+    {
+     "loai": "ky_hieu",
+     "id": "DH",
+     "kieu": "dong_ho_nuoc",
+     "vi_tri": [
+      1800,
+      300
+     ]
+    },
+    {
+     "loai": "ky_hieu",
+     "id": "V1",
+     "kieu": "van",
+     "vi_tri": [
+      1800,
+      1200
+     ]
+    },
+    {
+     "loai": "ky_hieu",
+     "id": "CR",
+     "kieu": "chau_rua",
+     "vi_tri": [
+      1700,
+      2150
+     ]
+    },
+    {
+     "loai": "ky_hieu",
+     "id": "VOI",
+     "kieu": "voi",
+     "vi_tri": [
+      1100,
+      1200
+     ]
+    },
+    {
+     "loai": "ky_hieu",
+     "id": "BC",
+     "kieu": "bon_cau",
+     "vi_tri": [
+      500,
+      2000
+     ],
+     "xoay": 180
+    },
+    {
+     "loai": "nut",
+     "id": "N1",
+     "vi_tri": [
+      500,
+      3100
+     ]
+    },
+    {
+     "loai": "nut",
+     "id": "N2",
+     "vi_tri": [
+      1300,
+      3100
+     ]
+    },
+    {
+     "loai": "ong",
+     "id": "C1",
+     "loai_ong": "ong_gas",
+     "diem": [
+      [
+       1800,
+       300
+      ],
+      [
+       1800,
+       1200
+      ]
+     ]
+    },
+    {
+     "loai": "ong",
+     "id": "C2",
+     "loai_ong": "ong_cap",
+     "diem": [
+      [
+       1800,
+       1200
+      ],
+      [
+       1800,
+       2150
+      ],
+      [
+       1700,
+       2150
+      ]
+     ]
+    },
+    {
+     "loai": "ong",
+     "id": "C3",
+     "loai_ong": "ong_cap",
+     "diem": [
+      [
+       1800,
+       1200
+      ],
+      [
+       1100,
+       1200
+      ]
+     ]
+    },
+    {
+     "loai": "ong",
+     "id": "T1",
+     "loai_ong": "ong_thoat",
+     "diem": [
+      [
+       500,
+       2000
+      ],
+      [
+       500,
+       3100
+      ]
+     ]
+    },
+    {
+     "loai": "ong",
+     "id": "T2",
+     "loai_ong": "ong_thoat",
+     "diem": [
+      [
+       1700,
+       2150
+      ],
+      [
+       1300,
+       2150
+      ],
+      [
+       1300,
+       3100
+      ]
+     ]
+    },
+    {
+     "loai": "chu_giai",
+     "vi_tri": [
+      2900,
+      2600
+     ]
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K1",
+     "kieu": "ngang",
+     "tham_chieu": [
+      "truc:1",
+      "truc:2"
+     ],
+     "phia": "tren"
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K2",
+     "kieu": "doc",
+     "tham_chieu": [
+      "truc:A",
+      "truc:B"
+     ],
+     "phia": "trai"
+    }
+   ]
+  }
+ ]
+}

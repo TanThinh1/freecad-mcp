@@ -122,7 +122,7 @@ def main():
     S = {"e1": load("e1_phong_don_gian", profile), "e2": load("e2_nha_cap4", profile), "e1r": load("e1_phong_don_gian", profile, raw_variant), "e1w": load("e1_phong_don_gian", profile, warn_variant),
          "e4": load("e4_mat_dung_nha_cap4", profile), "e5": load("e5_mat_cat_1_1", profile), "e5x": load("e5_mat_cat_1_1", profile, x_variant), "e7": load("e7_chi_tiet_mong", profile),
          "e5w": load("e5_mat_cat_1_1", profile, warn2_variant),
-         "e6": load("e6_chi_tiet_cua", profile), "e2c": load("e2_nha_cap4", profile, e2c_variant), "e4h": load("e4_mat_dung_nha_cap4", profile, e4h_variant), "e7c": load("e7_chi_tiet_mong", profile, e7c_variant)}
+         "e6": load("e6_chi_tiet_cua", profile), "e9": load("e9_so_do_dien_phong", profile), "e10": load("e10_so_do_cap_thoat_nuoc", profile), "e2c": load("e2_nha_cap4", profile, e2c_variant), "e4h": load("e4_mat_dung_nha_cap4", profile, e4h_variant), "e7c": load("e7_chi_tiet_mong", profile, e7c_variant)}
     work = os.path.join(OUT, "_mutations_e")
     shutil.rmtree(work, ignore_errors=True)
     os.makedirs(work)
@@ -190,6 +190,29 @@ def main():
     add("facade_hatch_requested_but_missing_line", "e4h", lambda D: D.prims.remove(L(D, "hatch:DAM1")[2]), {"1.63"}, {"2.36"})
     add("facade_rectangle_moved_1mm", "e4", lambda D: shift(D, tagged(D, "kc:DAM1", Rect)[0], 0.0, 1.0), {"1.64"}, {"2.30"})
     add("facade_rectangle_deleted", "e4", lambda D: D.prims.remove(tagged(D, "kc:C2", Rect)[0]), {"1.64"}, {"2.30"})
+    # ---- group 2 (21/11): electrical / plumbing symbols 1.73, wires and pipes 1.74, connections 1.75, legend 1.76 / 1.77
+    add("symbol_line_moved_1mm", "e9", lambda D: shift(D, L(D, "sym:BD")[0], 1.0, 0.0), {"1.73"}, {"2.31"})
+    add("symbol_circle_deleted", "e9", lambda D: D.prims.remove(tagged(D, "sym:O1", Circle)[0]), {"1.73"}, {"2.31"})
+    add("symbol_rectangle_moved_1mm", "e10", lambda D: shift(D, tagged(D, "sym:BC", Rect)[0], 0.0, 1.0), {"1.73"}, {"2.31"})
+    add("symbol_resized_circle_radius", "e9", lambda D: setattr(tagged(D, "sym:DEN1", Circle)[0], "r", tagged(D, "sym:DEN1", Circle)[0].r * 1.1), {"1.73"}, {"2.31"})
+    add("symbol_not_rotated_as_declared", "e9", lambda D: [shift(D, p, 0.0, 0.0) for p in []] or [D.prims.remove(p) for p in L(D, "sym:O1")[:1]], {"1.73"}, {"2.31"})
+    add("wire_vertex_moved_1mm", "e9", lambda D: shift(D, L(D, "ong:D_BD_CT")[0], 1.0, 0.0), {"1.74", "1.75"}, {"2.31"})
+    add("wire_segment_deleted", "e9", lambda D: D.prims.remove(L(D, "ong:D_CT_DEN1")[1]), {"1.74"}, {"2.31"})
+    add("wire_on_the_wrong_layer", "e9", lambda D: setattr(L(D, "ong:D_DEN1_DEN2")[0], "layer", "NET-MANH"), {"1.74"}, {"2.31"})
+    add("supply_pipe_on_a_thin_layer", "e10", lambda D: setattr(L(D, "ong:C1")[0], "layer", "NET-MANH"), {"1.74"}, {"2.30"})
+    add("drain_pipe_on_a_continuous_layer", "e10", lambda D: setattr(L(D, "ong:T1")[0], "layer", "NET-MANH"), {"1.74"}, {"2.31"})
+    add("pipe_extra_segment", "e10", lambda D: D.prims.append(Line(layer="NET-CHINH", tag="ong:C1", p1=(L(D, "ong:C1")[0].p2[0], L(D, "ong:C1")[0].p2[1]), p2=(L(D, "ong:C1")[0].p2[0] + 3.0, L(D, "ong:C1")[0].p2[1]))), {"1.74", "1.75"}, {"2.30"})
+    add("junction_dot_moved_1mm", "e10", lambda D: shift(D, tagged(D, "nut:N1", Circle)[0], 1.0, 0.0), {"1.74"}, {"2.31"})
+    add("junction_dot_deleted", "e10", lambda D: D.prims.remove(tagged(D, "nut:N2", Circle)[0]), {"1.74"}, {"2.31"})
+    add("wire_end_0.5mm_short_of_its_node_dangling", "e9", lambda D: setattr(L(D, "ong:D_DEN2_Q1")[-1], "p2", (L(D, "ong:D_DEN2_Q1")[-1].p2[0] + 0.5 / D.scale, L(D, "ong:D_DEN2_Q1")[-1].p2[1])), {"1.75", "1.74"}, {"2.31"})
+    add("pipe_end_left_floating_1mm", "e10", lambda D: setattr(L(D, "ong:C3")[-1], "p2", (L(D, "ong:C3")[-1].p2[0] + 1.0 / D.scale, L(D, "ong:C3")[-1].p2[1])), {"1.75", "1.74"}, {"2.30"})
+    add("pipe_polyline_broken_between_segments", "e10", lambda D: shift(D, L(D, "ong:T2")[1], 1.0, 0.0), {"1.75", "1.74"}, {"2.31"})
+    add("legend_symbol_moved_1mm", "e9", lambda D: shift(D, L(D, "legend_sym:o_cam")[0], 1.0, 0.0), {"1.76"}, {"2.31"})
+    add("legend_sample_line_deleted", "e10", lambda D: D.prims.remove(L(D, "legend_line:ong_cap")[0]), {"1.76"}, {"2.30"})
+    add("legend_row_text_deleted", "e9", lambda D: D.prims.remove(T(D, "legend_text:den")[0]), {"1.77", "1.55"}, {"2.32"})
+    add("legend_rows_in_the_wrong_order", "e9", lambda D: [setattr(T(D, "legend_text:o_cam")[0], "s", "CÔNG TẮC"), setattr(T(D, "legend_text:cong_tac")[0], "s", "Ổ CẮM")], {"1.77"}, None)
+    add("legend_title_deleted", "e10", lambda D: D.prims.remove(T(D, "legend_title:")[0]), {"1.77", "1.55"}, {"2.32"})
+    add("legend_lists_an_unused_symbol", "e9", lambda D: D.prims.append(Text(layer="CHU", tag="legend_text:van", s="VAN", pos=(T(D, "legend_text:den")[0].pos[0], T(D, "legend_text:den")[0].pos[1] - 60.0), h=2.5)), {"1.77", "1.55"}, {"2.32"})
     # ---- phase 2: 1.63 hatch
     add("hatch_line_deleted", "e5", lambda D: D.prims.remove(H(D, 3)), {"1.63"}, {"2.36"})
     add("hatch_line_moved_0.5mm_near_miss", "e5", lambda D: shift(D, H(D, 5), 0.5, 0.0), {"1.63"}, {"2.36"})
@@ -347,6 +370,10 @@ def main():
     need({"1.54", "1.55"}, prim_check(D2, sp_edit(sp2, lambda s: elems(s, "kich_thuoc")[0].update(tham_chieu=["truc:1", "S1:dau", "S1:cuoi", "D1:dau", "D1:cuoi", "truc:2"]))), "spec_dimension_reference_changed")
     need({"1.60"}, prim_check(D1, sp_edit(sp1, lambda s: s.update(scale=100))), "spec_scale_1:100_vs_drawing_1:50")
     sp5, D5 = S["e5"]
+    sp9, D9 = S["e9"]
+    need({"1.73", "1.75", "1.74"}, prim_check(D9, sp_edit(sp9, lambda s: elems(s, "ky_hieu")[0].update(vi_tri=(Fraction(3600), Fraction(1000))))), "spec_switchboard_moved_100mm_vs_drawing")
+    need({"1.74"}, prim_check(D9, sp_edit(sp9, lambda s: elems(s, "ong")[0].update(loai_ong="ong_cap"))), "spec_wire_declared_as_water_pipe_vs_drawing")
+    need({"1.73"}, prim_check(D9, sp_edit(sp9, lambda s: elems(s, "ky_hieu")[3].update(xoay=90))), "spec_socket_rotated_vs_drawing")
     need({"1.63"}, prim_check(S["e4"][1], sp_edit(S["e4"][0], lambda s: elems(s, "mat_tuong_dung")[0].update(vat_lieu="gach"))), "spec_facade_hatch_requested_but_drawing_has_none")
     need({"1.67", "1.64", "1.63"}, prim_check(D5, sp_edit(sp5, lambda s: s["views"][0]["elems"][0]["layers"].__setitem__(0, ("dat", Fraction(160))))), "spec_layer_150_vs_160_in_the_drawing")
     need({"1.67"}, prim_check(D5, sp_edit(sp5, lambda s: elems(s, "lop_vat_lieu")[1].update(tong_day=Fraction(240)))), "spec_total_thickness_240_vs_layers_230")

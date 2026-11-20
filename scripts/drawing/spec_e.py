@@ -368,7 +368,10 @@ def v_ghi_chu(e, path, ctx, view):
 
 
 def v_tieu_de(e, path, ctx, view):
-    return dict(chu=text_of(e, "chu", path, ctx, required=False))
+    t = text_of(e, "chu", path, ctx, required=False)
+    if t and cons_width(t, cap_to_em(5.0), 1.0, True) > MAX_LINE_MM:
+        ctx.err(path, f"chu = {t[:30]!r}...: chữ đậm cao 5 mm rộng {cons_width(t, cap_to_em(5.0), 1.0, True):.0f} mm, vượt {MAX_LINE_MM:g} mm; rút gọn.")
+    return dict(chu=t)
 
 
 def v_bac(e, path, ctx, view):
@@ -593,6 +596,8 @@ def validate(spec) -> dict:
         if not isinstance(hten, str) or not hten.strip() or CTRL.search(hten):
             errors.append(f"{hp}.ten = {hten!r} phải là chuỗi không rỗng (tên hình, in dưới hình).")
             hten = ""
+        elif cons_width(hten.strip(), cap_to_em(5.0), 1.0, True) > MAX_LINE_MM:
+            errors.append(f"{hp}.ten = {hten[:30]!r}...: tên hình in đậm cao 5 mm rộng {cons_width(hten.strip(), cap_to_em(5.0), 1.0, True):.0f} mm, vượt {MAX_LINE_MM:g} mm; rút gọn tên hình.")
         vscale = None
         if "ty_le" in h:
             _, vscale = parse_scale_e(h["ty_le"], errors, f"{hp}.ty_le")
@@ -709,6 +714,8 @@ def validate(spec) -> dict:
                 if door_sweep_hits(view, de, fe["box"]):
                     ctx.warnings.append(f"{fe['path']}: nội thất {fe['id']!r} nằm trong vùng quét của cánh cửa đi {de['id']!r} (cánh + cung mở 90°): cửa không mở hết được; dịch nội thất hoặc đổi chiều mở (cảnh báo mềm, bản vẽ vẫn dựng).")
     for view in views:
+        elems3.check_pipes(view, ctx)
+    for view in views:
         legs_ops = {}
         for e in view["elems"]:
             if e["t"] in ("cua_di", "cua_so", "o_trong") and e["vi_tri"] is not None and e["rong"] is not None:
@@ -719,11 +726,13 @@ def validate(spec) -> dict:
                 if a["vi_tri"] + a["rong"] > b["vi_tri"]:
                     ctx.err(b["path"], f"chồng lên {a['id']!r} (phần tử {a['idx']}) trên đoạn {k} của tường {wid!r}: {a['id']!r} kết thúc ở {fnum(a['vi_tri'] + a['rong'])} mm, {b['id']!r} bắt đầu ở {fnum(b['vi_tri'])} mm.")
     for view in views:
-        if not any(e["t"] in ("tuong", "duong", "polyline", "cung", "tron", "noi_that_co_ban", "truc", "lop_vat_lieu", "san", "dam", "cot_mc", "mong_don", "cot_chi_tiet", "cua_dung", "mai", "lan_can", "bac_thang_don_gian") for e in view["elems"]) and view["elems"]:
+        if not any(e["t"] in ("tuong", "duong", "polyline", "cung", "tron", "noi_that_co_ban", "truc", "lop_vat_lieu", "san", "dam", "cot_mc", "mong_don", "cot_chi_tiet", "cua_dung", "mai", "lan_can", "bac_thang_don_gian", "ky_hieu", "ong") for e in view["elems"]) and view["elems"]:
             ctx.err(f"hinh {view['id']!r}", "hình chưa có phần tử hình học nào (tuong, truc, noi_that_co_ban, duong, polyline, cung, tron).")
     if errors:
         raise SpecError(errors)
     return dict(loai="E", ten=ten, kho_giay=kho, ty_le=ty_le, scale=scale, khung_ten=kt, params=params, views=views, warnings=ctx.warnings, n_elements=total)
 
 
-import elems2  # noqa: E402,F401  (registers the phase 2 elements into CATALOG at its own end; works whichever module is imported first)
+import elems2  # noqa: E402,F401
+import elems3  # noqa: E402,F401  (electrical / plumbing symbols)
+#  (registers the phase 2 elements into CATALOG at its own end; works whichever module is imported first)

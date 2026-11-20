@@ -18,6 +18,7 @@ from tcvn import ARIAL_CAP, SHEETS
 from verify import Checks, check_expressions, close, _seg_rect_gap
 from verify_d import _box, _real_width, dxf_text_boxes
 import verify_e2
+import verify_e3
 
 TOL = 1e-6              # real mm, floating point
 TOL_DXF = 1e-3
@@ -28,7 +29,7 @@ SCALE_LIMIT = 200
 AUTO = (20, 50, 100, 200, 500)
 FURN = {"giuong": (1600, 2000, "GIƯỜNG"), "ban": (1200, 600, "BÀN"), "ghe": (450, 450, "GHẾ"), "tu": (1200, 600, "TỦ"), "bep": (2000, 600, "BẾP"),
         "bon_rua": (800, 500, "BỒN RỬA"), "bon_cau": (400, 700, "BỒN CẦU"), "lavabo": (500, 400, "LAVABO")}
-FAMILY_OF_TAG = (("hatch:", "1.63"), ("lop:", "1.64"), ("kc:", "1.64"), ("mong:", "1.64"), ("cot:", "1.64"), ("cd:", "1.65"), ("mai:", "1.65"), ("lc:", "1.65"), ("bt:", "1.65"),
+FAMILY_OF_TAG = (("sym:", "1.73"), ("nut:", "1.74"), ("ong:", "1.74"), ("legend_", "1.76"), ("hatch:", "1.63"), ("lop:", "1.64"), ("kc:", "1.64"), ("mong:", "1.64"), ("cot:", "1.64"), ("cd:", "1.65"), ("mai:", "1.65"), ("lc:", "1.65"), ("bt:", "1.65"),
                  ("lv:", "1.66"), ("cut", "1.66"), ("gio_", "1.66"), ("leader:", "1.66"), ("axis_", "1.50"), ("bubble", "1.50"), ("wall_", "1.51"), ("door_", "1.52"), ("win_", "1.52"), ("furn:", "1.53"), ("raw_", "1.53"), ("bac_", "1.53"), ("dim:", "1.54"))
 
 
@@ -281,6 +282,7 @@ def expected(sp, s):
         elif e["t"] == "chu":
             tx.append(("CHU", e["chu"]))
     verify_e2.add_expected(view, s, P, sh, tx)
+    verify_e3.add_expected(view, s, P, sh, tx)
     # ---- extent of the geometry (what the dimensions are offset from)
     xs, ys = [], []
     for fam, layer, kind, d in sh:
@@ -435,8 +437,8 @@ def family_id(tag):
     return None
 
 
-EXP_FAMILY = {"hatch": "1.63", "kc": "1.64", "dung": "1.65", "dau": "1.66", "truc": "1.50", "tuong": "1.51", "cua": "1.52", "noi_that": "1.53", "tho": "1.53", "bac": "1.53", "kich_thuoc": "1.54"}
-NAMES = {"1.63": "hatch vật liệu: đúng mẫu (góc, khoảng cách, mốc theo gốc toạ độ) và đúng đoạn cắt theo hình chữ nhật của lớp (hai chiều)", "1.64": "lớp vật liệu / sàn / dầm / cột / móng / cột chi tiết: hình chữ nhật, thép đai và tròn thép đúng vị trí, kích thước",
+EXP_FAMILY = {"kyhieu": "1.73", "ong": "1.74", "legend": "1.76", "hatch": "1.63", "kc": "1.64", "dung": "1.65", "dau": "1.66", "truc": "1.50", "tuong": "1.51", "cua": "1.52", "noi_that": "1.53", "tho": "1.53", "bac": "1.53", "kich_thuoc": "1.54"}
+NAMES = {"1.73": "ký hiệu điện / nước (ổ cắm, công tắc, đèn, quạt, bảng điện, bồn cầu, chậu rửa, vòi, van, đồng hồ): đúng hình, kích thước cố định trên giấy, vị trí và chiều xoay", "1.74": "đường dây điện, ống cấp, ống thoát và nút nối: đúng toạ độ, đúng layer theo loại (NET-TAM, NET-CHINH, NET-KHUAT)", "1.76": "chú giải tự sinh: ký hiệu và nét mẫu đúng vị trí (và chữ ở 1.55, thứ tự ở 1.76 đo riêng)", "1.63": "hatch vật liệu: đúng mẫu (góc, khoảng cách, mốc theo gốc toạ độ) và đúng đoạn cắt theo hình chữ nhật của lớp (hai chiều)", "1.64": "lớp vật liệu / sàn / dầm / cột / móng / cột chi tiết: hình chữ nhật, thép đai và tròn thép đúng vị trí, kích thước",
          "1.65": "cửa đứng, mái (bằng, 1 mái, 2 mái, độ dốc, bề dày), lan can, bậc thang đúng toạ độ", "1.66": "cao độ, đường dẫn ghi chú, dấu cắt, tuyến gió đúng vị trí và đúng số lượng nét", "1.50": "lưới trục + vòng ký hiệu (vị trí, độ dài trục, tâm vòng)", "1.51": "đường bao tường = biên của hợp các thân tường (cắt bởi cửa), chiều hai chiều", "1.52": "ký hiệu cửa đi (khung, cánh, cung mở) và cửa sổ đúng vị trí, nằm trọn trong tường",
          "1.53": "nội thất, phần tử thô (đường, polyline, cung, tròn) và mũi tên bắc", "1.54": "kích thước đo từ tham chiếu (đường, gióng, mũi tên đúng toạ độ và đúng giá trị)"}
 
@@ -513,10 +515,11 @@ def check_primitives_e(C: Checks, D, sp):
     for fam, layer, kind in miss:
         by_fam[EXP_FAMILY[fam]].append(f"{fam}/{layer}/{kind}")
     counts = collections.Counter(EXP_FAMILY[x[0]] for x in X["shapes"])
-    for cid in ("1.50", "1.51", "1.52", "1.53", "1.54", "1.63", "1.64", "1.65", "1.66"):
+    for cid in ("1.50", "1.51", "1.52", "1.53", "1.54", "1.63", "1.64", "1.65", "1.66", "1.73", "1.74", "1.76"):
         C.add(1, cid, NAMES[cid], not by_fam[cid] and not extras[cid] and not extras["?"],
               f"{counts[cid]} nét/hình mong đợi; thiếu {len(by_fam[cid])} {by_fam[cid][:2]}; thừa {len(extras[cid])} {extras[cid][:3]}" + (f"; thừa không rõ nguồn {extras['?'][:3]}" if extras["?"] and cid == "1.50" else ""))
     verify_e2.check_phase2(C, D, sp)
+    verify_e3.check_phase3(C, D, sp)
     # ---- texts: strings
     want = collections.Counter(X["texts"])
     drawn = [t for t in D.prims if isinstance(t, Text) and not t.sheet]

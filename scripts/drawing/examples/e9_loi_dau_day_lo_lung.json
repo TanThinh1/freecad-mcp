@@ -1,0 +1,288 @@
+{
+ "loai": "E",
+ "ten": "e9_loi_dau_day_lo_lung",
+ "ty_le": "1:50",
+ "khung_ten": {
+  "don_vi_tk": "CÔNG TY TNHH THIẾT KẾ KẾT CẤU THÉP",
+  "cong_trinh": "NHÀ Ở GIA ĐÌNH CẤP 4",
+  "chu_dau_tu": "ÔNG NGUYỄN VĂN A",
+  "loai_ho_so": "BVTC",
+  "ngay": "22/11/2026",
+  "ten_ban_ve": "LỖI: ĐẦU DÂY LƠ LỬNG"
+ },
+ "hinh": [
+  {
+   "id": "H1",
+   "ten": "SƠ ĐỒ ĐIỆN PHÒNG NGỦ",
+   "phan_tu": [
+    {
+     "loai": "truc",
+     "truc_dung": [
+      {
+       "ten": "1",
+       "x": 0
+      },
+      {
+       "ten": "2",
+       "x": 4000
+      }
+     ],
+     "truc_ngang": [
+      {
+       "ten": "A",
+       "y": 0
+      },
+      {
+       "ten": "B",
+       "y": 3600
+      }
+     ]
+    },
+    {
+     "loai": "tuong",
+     "id": "W1",
+     "diem": [
+      [
+       0,
+       0
+      ],
+      [
+       4000,
+       0
+      ],
+      [
+       4000,
+       3600
+      ],
+      [
+       0,
+       3600
+      ]
+     ],
+     "kin": true,
+     "day": 220
+    },
+    {
+     "loai": "cua_di",
+     "id": "D1",
+     "tuong": "W1",
+     "doan": 0,
+     "vi_tri": 500,
+     "rong": 900,
+     "ban_le": "dau",
+     "mo_ve": "trai"
+    },
+    {
+     "loai": "cua_so",
+     "id": "S1",
+     "tuong": "W1",
+     "doan": 2,
+     "vi_tri": 1100,
+     "rong": 1500,
+     "ky_hieu": "kep"
+    },
+    {
+     "loai": "ky_hieu",
+     "id": "BD",
+     "kieu": "bang_dien",
+     "vi_tri": [
+      3500,
+      1000
+     ]
+    },
+    {
+     "loai": "ky_hieu",
+     "id": "CT1",
+     "kieu": "cong_tac",
+     "vi_tri": [
+      1700,
+      300
+     ]
+    },
+    {
+     "loai": "ky_hieu",
+     "id": "O1",
+     "kieu": "o_cam",
+     "vi_tri": [
+      3700,
+      2200
+     ],
+     "xoay": 90
+    },
+    {
+     "loai": "ky_hieu",
+     "id": "O2",
+     "kieu": "o_cam",
+     "vi_tri": [
+      400,
+      2200
+     ]
+    },
+    {
+     "loai": "ky_hieu",
+     "id": "DEN1",
+     "kieu": "den",
+     "vi_tri": [
+      1200,
+      2600
+     ]
+    },
+    {
+     "loai": "ky_hieu",
+     "id": "DEN2",
+     "kieu": "den",
+     "vi_tri": [
+      2800,
+      2600
+     ]
+    },
+    {
+     "loai": "ky_hieu",
+     "id": "Q1",
+     "kieu": "quat",
+     "vi_tri": [
+      2000,
+      1800
+     ]
+    },
+    {
+     "loai": "ong",
+     "id": "D_BD_CT",
+     "loai_ong": "day_dien",
+     "diem": [
+      [
+       3500,
+       1000
+      ],
+      [
+       3500,
+       300
+      ],
+      [
+       1700,
+       300
+      ]
+     ]
+    },
+    {
+     "loai": "ong",
+     "id": "D_BD_O1",
+     "loai_ong": "day_dien",
+     "diem": [
+      [
+       3500,
+       1000
+      ],
+      [
+       3500,
+       2200
+      ],
+      [
+       3700,
+       2200
+      ]
+     ]
+    },
+    {
+     "loai": "ong",
+     "id": "D_CT_DEN1",
+     "loai_ong": "day_dien",
+     "diem": [
+      [
+       1700,
+       300
+      ],
+      [
+       1700,
+       2600
+      ],
+      [
+       1200,
+       2600
+      ]
+     ]
+    },
+    {
+     "loai": "ong",
+     "id": "D_DEN1_DEN2",
+     "loai_ong": "day_dien",
+     "diem": [
+      [
+       1200,
+       2600
+      ],
+      [
+       2800,
+       2600
+      ]
+     ]
+    },
+    {
+     "loai": "ong",
+     "id": "D_DEN1_O2",
+     "loai_ong": "day_dien",
+     "diem": [
+      [
+       1200,
+       2600
+      ],
+      [
+       400,
+       2600
+      ],
+      [
+       400,
+       2200
+      ]
+     ]
+    },
+    {
+     "loai": "ong",
+     "id": "D_DEN2_Q1",
+     "loai_ong": "day_dien",
+     "diem": [
+      [
+       2800,
+       2600
+      ],
+      [
+       2800,
+       1800
+      ],
+      [
+       2100,
+       1800
+      ]
+     ]
+    },
+    {
+     "loai": "chu_giai",
+     "vi_tri": [
+      5200,
+      3400
+     ]
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K1",
+     "kieu": "ngang",
+     "tham_chieu": [
+      "truc:1",
+      "truc:2"
+     ],
+     "phia": "duoi"
+    },
+    {
+     "loai": "kich_thuoc",
+     "id": "K2",
+     "kieu": "doc",
+     "tham_chieu": [
+      "truc:A",
+      "truc:B"
+     ],
+     "phia": "trai"
+    }
+   ]
+  }
+ ]
+}

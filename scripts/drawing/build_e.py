@@ -21,6 +21,7 @@ from primitives import Circle, Drawing, Line, Rect, Text, cap_to_em, drawing_ext
 from scale import fit_in_sheet, sheet_scale_candidates
 from spec_b import SpecError
 import elems2
+import elems3
 from spec_e import (ARC_STEPS_90, AUTO_SCALES, LAYER_OF, fmt2, fmt_len, leg_pieces, leg_rect, resolve, wall_legs)
 from tcvn import ARIAL_CAP, SHEETS, cons_width, LAYER_AXIS, LAYER_BUBBLE, LAYER_DIM, LAYER_TEXT
 from verify import _seg_rect_gap
@@ -260,6 +261,7 @@ def build_geometry(sp, view, W, X):
             for p, q in ((tip, b1), (tip, b2), (b1, b2)):
                 W.line("NET-MANH", "bac_tam_giac", p, q)
     elems2.geom(sp, view, W, X)
+    elems3.geom(sp, view, W, X)
 
 
 def geometry_extent(W, skip=()):
@@ -422,6 +424,7 @@ def build_labels(sp, view, W, X):
     P = sp["params"]
     hn, ha, hf = P["cao_chu_ten_phong"], P["cao_chu_ghi_chu"], P["cao_chu_noi_that"]
     elems2.labels2(sp, view, W, X)
+    elems3.labels3(sp, view, W, X)
     order = {"noi_that_co_ban": 0, "phong": 1}
     for e in sorted(view["elems"], key=lambda q: (order.get(q["t"], 2), q["idx"])):
         t = e["t"]
