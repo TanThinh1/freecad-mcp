@@ -1,5 +1,5 @@
 """Mutation tests for drawing type E (ve_tu_do): corrupt primitives / DXF / DWG read-back / PDF expectations on purpose and require verify.py + verify_e.py to FAIL the matching check;
-plus positive controls (the unmutated data passes every check that runs). Every rule of verify_e (1.50-1.62, 2.30-2.34, 3.20-3.23, 5.20) has at least 2 mutants.
+plus positive controls (the unmutated data passes every check that runs). Every rule of verify_e (1.50-1.62, 2.30-2.34, 3.20-3.23, 5.20; the room-name height 1.78 / 2.38 / 3.27 has its own mutants) has at least 2 mutants.
 
     python scripts\\drawing\\test_verify_mutations_e.py     (needs out\\e1_phong_don_gian and out\\e2_nha_cap4 from make_drawing for the PDF cases; TCVN_PROFILE set)
 """
@@ -128,7 +128,7 @@ def main():
     S = {"e1": load("e1_phong_don_gian", profile), "e2": load("e2_nha_cap4", profile), "e1r": load("e1_phong_don_gian", profile, raw_variant), "e1w": load("e1_phong_don_gian", profile, warn_variant),
          "e4": load("e4_mat_dung_nha_cap4", profile), "e5": load("e5_mat_cat_1_1", profile), "e5x": load("e5_mat_cat_1_1", profile, x_variant), "e7": load("e7_chi_tiet_mong", profile),
          "e5w": load("e5_mat_cat_1_1", profile, warn2_variant), "e4lv": load("e4_mat_dung_nha_cap4", profile, e4lv_variant),
-         "e6": load("e6_chi_tiet_cua", profile), "e9": load("e9_so_do_dien_phong", profile), "e10": load("e10_so_do_cap_thoat_nuoc", profile), "e2c": load("e2_nha_cap4", profile, e2c_variant), "e4h": load("e4_mat_dung_nha_cap4", profile, e4h_variant), "e7c": load("e7_chi_tiet_mong", profile, e7c_variant)}
+         "e6": load("e6_chi_tiet_cua", profile), "e9": load("e9_so_do_dien_phong", profile), "e10": load("e10_so_do_cap_thoat_nuoc", profile), "e2c": load("e2_nha_cap4", profile, e2c_variant), "e4h": load("e4_mat_dung_nha_cap4", profile, e4h_variant), "e7c": load("e7_chi_tiet_mong", profile, e7c_variant), "n10": load("e10_nha_pho_tang1", profile)}
     work = os.path.join(OUT, "_mutations_e")
     shutil.rmtree(work, ignore_errors=True)
     os.makedirs(work)
@@ -368,6 +368,12 @@ def main():
     # ---- 1.61 warnings, 1.62 arithmetic
     add("warnings_missing_for_narrow_door_and_thick_wall", "e1w", lambda D: D.info.__setitem__("warnings", []), {"1.61"})
     add("spurious_warning_when_door_is_wide_enough", "e1", lambda D: D.info.__setitem__("warnings", ["phan_tu[2]: cửa đi rộng 900 mm, hẹp hơn 700 mm (kinh nghiệm thực tế, KHÔNG phải điều khoản TCVN)"]), {"1.61"})
+    # room name height (new checks 1.78 / 2.38; the lowered drawing n10 = e10_nha_pho_tang1 has P4 'WC' at 2.5 mm)
+    add("room_name_below_2.5mm_in_lowered_drawing", "n10", lambda D: setattr(T(D, "room_name:P4")[0], "h", 2.0), {"1.78"}, {"2.38"})
+    add("room_name_1.5mm_on_another_room", "n10", lambda D: setattr(T(D, "room_name:P2")[0], "h", 1.5), {"1.78"}, {"2.38"})
+    add("room_name_2.4mm_just_under_the_minimum", "e1", lambda D: setattr(T(D, "room_name:P1")[0], "h", 2.4), {"1.78"}, {"2.38"})
+    add("lowered_room_name_without_a_record", "n10", lambda D: D.info.update(nhan_ha_co=[]), {"1.78"})
+    add("record_with_a_wrong_new_height", "n10", lambda D: D.info["nhan_ha_co"][0].update(cao_moi=3.0), {"1.78"})
     add("false_arithmetic_note", "e2", lambda D: setattr(T(D, "note:")[1], "s", "- 2 x 6 = 13 CỬA"), {"1.62", "1.55"}, {"2.12"})
 
     for name, key, fn, prim_ids, dxf_ids in cat:
@@ -491,6 +497,30 @@ def main():
         C = verify.Checks()
         verify_e.check_dwg_e(C, D5, sp5, read_dxf(pbad))
         need({"3.25"}, failed(C), f"dwg_read_back_{nm}")
+
+    # ---- DWG read back of the room-name height (3.27): the lowered drawing e10_nha_pho_tang1
+    try:
+        sp10, D10 = S["n10"]
+        dxf10 = os.path.join(work, "ctl_n10.dxf")
+        render_dxf(D10, profile, dxf10)
+        for nm, fn, ids in (("ctl", None, set()), ("room_name_2.0mm", lambda D: setattr(T(D, "room_name:P4")[0], "h", 2.0), {"3.27"}), ("room_name_1.5mm_on_P2", lambda D: setattr(T(D, "room_name:P2")[0], "h", 1.5), {"3.27"})):
+            Dm = D10 if fn is None else mut(fn, D10)
+            pd = os.path.join(work, f"dwg10_{nm}.dxf")
+            render_dxf(Dm, profile, pd)
+            dwg = pd[:-4] + ".dwg"
+            info = oda.dxf_to_dwg(pd, dwg, "ACAD2018")
+            back = pd[:-4] + "_back.dxf"
+            if not (info.get("ok") and oda.dwg_to_dxf(dwg, back, "ACAD2018").get("ok")):
+                expect(f"dwg10_{nm}_skipped", False, f"ODA không chạy được: {info}")
+                continue
+            C = verify.Checks()
+            verify_e.check_dwg_e(C, D10, sp10, read_dxf(back))
+            if fn is None:
+                expect("control_dwg_n10_has_3.27", "3.27" in {c["id"] for c in C.items} and not failed(C), f"không đạt: {sorted(failed(C))}")
+            else:
+                need(ids, failed(C), f"dwg_read_back_n10_{nm}")
+    except oda.OdaError as e:
+        expect("dwg10_skipped", False, f"ODA: {e}")
 
     # ---- PDF cross-checks
     pdf1, pdf2 = (os.path.join(OUT, n, n + ".pdf") for n in ("e1_phong_don_gian", "e2_nha_cap4"))

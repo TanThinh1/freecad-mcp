@@ -585,6 +585,7 @@ def check_primitives_e(C: Checks, D, sp):
     check_leaders(C, D)
     check_bubbles(C, D)
     check_expressions(C, [t.s for t in drawn], 1, "1.62", "chữ trên bản vẽ")
+    check_room_name_height(C, D)
 
 
 def sweep_hit(view, door, box):
@@ -735,6 +736,55 @@ def check_policy_e(C, D, sp):
           found and not why and (not want or D.scale == want) and (kho == "auto" or D.sheet == kho), f"chọn {D.sheet} 1:{D.scale}; cặp đứng trước vẫn vừa: {why[:3]}")
 
 
+# ------------------------------------------------------------------ room-name height (only for drawings whose room names were lowered below the default)
+ROOM_NAME_MIN = 2.5                                # mm paper: the smallest standard text height; a lowered room name never goes under it
+
+
+def room_name_lowered(D):
+    """True when a room name is drawn lower than the default height `cao_chu_ten_phong` (measured from the primitives) or the builder reported it. Only then 1.78 / 2.38 / 3.27 run,
+    so a drawing without lowered labels keeps its old list of checks."""
+    P = D.info["params"]
+    return bool(D.info.get("nhan_ha_co")) or any(t.h < P["cao_chu_ten_phong"] - 1e-9 for t in D.prims if isinstance(t, Text) and not t.sheet and t.tag.startswith("room_name:"))
+
+
+def check_room_name_height(C, D):
+    if not room_name_lowered(D):
+        return
+    P = D.info["params"]
+    got = {t.tag.split(":", 1)[1]: t.h for t in D.prims if isinstance(t, Text) and not t.sheet and t.tag.startswith("room_name:")}
+    rec = {r["id"]: r for r in D.info.get("nhan_ha_co", []) if r["loai"] == "ten_phong"}
+    low = [i for i, h in got.items() if h < ROOM_NAME_MIN - 1e-6]
+    unreported = [i for i, h in got.items() if h < P["cao_chu_ten_phong"] - 1e-9 and (i not in rec or abs(rec[i]["cao_moi"] - h) > 1e-9)]
+    stale = [i for i, r in rec.items() if i not in got or abs(got[i] - r["cao_moi"]) > 1e-9]
+    C.add(1, "1.78", f"tên phòng không bao giờ nhỏ hơn {ROOM_NAME_MIN:g} mm giấy (đo từ chữ đã vẽ); mỗi tên phòng hạ cỡ đều có ghi nhận (nhan_ha_co) đúng cỡ mới, không ghi nhận thừa",
+          not low and not unreported and not stale and bool(got), f"{len(got)} tên phòng; cỡ nhỏ nhất {min(got.values()) if got else 'không có'} mm; dưới {ROOM_NAME_MIN:g}: {low}; hạ cỡ không ghi nhận: {unreported}; ghi nhận sai: {stale}")
+
+
+def dxf_room_name_height(C, D, sp, dx, group, cid, where):
+    """Height (paper mm = TEXT code 40 / scale) of the room name TEXT standing inside its room: at least one per room must be >= ROOM_NAME_MIN (a furniture label may share the string)."""
+    if not room_name_lowered(D):
+        return
+    from readers import unesc
+    s = D.scale
+    best, bad = {}, []
+    for e in dx["ents"]:
+        if e["type"] != "TEXT":
+            continue
+        r = e["rec"]
+        try:
+            txt = unesc("".join(r.get(3, [])) + (r.get(1) or [""])[0])
+            h, wf = f(r, 40), (f(r, 41) if 41 in r else 1.0)
+            ax, ay = f(r, 10) + _real_width(txt, False, h / ARIAL_CAP, wf) / 2, f(r, 20)
+        except (KeyError, ValueError, IndexError):
+            continue
+        for q in sp["views"][0]["elems"]:
+            if q["t"] == "phong" and q["ten"] == txt and point_in(q["da_giac"], Fraction(ax).limit_denominator(10 ** 6), Fraction(ay).limit_denominator(10 ** 6)):
+                best[q["id"]] = max(best.get(q["id"], 0.0), h / s)
+    rooms = [q["id"] for q in sp["views"][0]["elems"] if q["t"] == "phong"]
+    bad = [f"{i}:{best.get(i, 0.0):.3f}" for i in rooms if best.get(i, 0.0) < ROOM_NAME_MIN - 1e-3]
+    C.add(group, cid, f"{where}: tên phòng (TEXT trong đa giác phòng) cao ≥ {ROOM_NAME_MIN:g} mm giấy (mã 40 chia tỷ lệ)", not bad and bool(rooms), f"phòng dưới {ROOM_NAME_MIN:g} mm hoặc không có chữ: {bad[:4]}")
+
+
 # ------------------------------------------------------------------ 2/3. DXF and DWG read back
 def in_title_block(D, kind, d):
     """True when a DXF shape lies inside the title block (its dividers are drawn on NET-MANH): converted to sheet mm with the origin and scale of the drawing."""
@@ -855,6 +905,7 @@ def check_dxf_e(C: Checks, D, sp, dx):
     dxf_checks(C, D, sp, dx, 2, ("2.30", "2.31", "2.32", "2.35", "2.36"), "DXF")
     dxf_text_rules(C, D, dx, 2, "2.33", "DXF")
     verify_e3.check_legend_linetypes(C, D, sp, dx, 2, "2.37", "DXF")
+    dxf_room_name_height(C, D, sp, dx, 2, "2.38", "DXF")
     s = D.scale
     nz = [e for e in dx["ents"] if e["type"] == "LINE" and math.hypot(f(e["rec"], 11) - f(e["rec"], 10), f(e["rec"], 21) - f(e["rec"], 20)) < 1e-9]
     keys = collections.Counter((e["layer"], round(f(e["rec"], 10), 4), round(f(e["rec"], 20), 4), round(f(e["rec"], 11), 4), round(f(e["rec"], 21), 4)) for e in dx["ents"] if e["type"] == "LINE")
@@ -866,6 +917,7 @@ def check_dwg_e(C: Checks, D, sp, bx):
     dxf_checks(C, D, sp, bx, 3, ("3.20", "3.21", "3.22", "3.24", "3.25"), "DWG (đọc lại sau khứ hồi)")
     dxf_text_rules(C, D, bx, 3, "3.23", "DWG (đọc lại sau khứ hồi)")
     verify_e3.check_legend_linetypes(C, D, sp, bx, 3, "3.26", "DWG (đọc lại sau khứ hồi)")
+    dxf_room_name_height(C, D, sp, bx, 3, "3.27", "DWG (đọc lại sau khứ hồi)")
 
 
 # ------------------------------------------------------------------ 5. PDF
