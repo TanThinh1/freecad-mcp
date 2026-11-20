@@ -51,7 +51,7 @@ async def main():
                 d, n_img, err = payload(res)
                 return d, n_img, err, dt
 
-            cases = [("thang", "a2_3000x17"), ("luoi_cot", "b2_12000x30000"), ("khung_ngang", "c5_11000x6000_le"), ("xa_go", "d1_12000x30000_2mai"), ("ve_tu_do", "e2_nha_cap4")]
+            cases = [("thang", "a2_3000x17"), ("luoi_cot", "b2_12000x30000"), ("khung_ngang", "c5_11000x6000_le"), ("xa_go", "d1_12000x30000_2mai"), ("ve_tu_do", "e2_nha_cap4"), ("ve_tu_do", "e9_so_do_dien_phong")]
             for loai, ex in cases:
                 d, _, err, dt = await call("huong_dan_ve", {"loai": loai})
                 print(f"huong_dan_ve({loai}): {dt:.2f}s keys={sorted(d)[:6]} loi={err}")
